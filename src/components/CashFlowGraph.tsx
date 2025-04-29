@@ -1,0 +1,89 @@
+import React from 'react';
+import { BsArrowUpCircleFill, BsArrowDownCircleFill } from 'react-icons/bs';
+
+interface CashFlowGraphProps {
+  cashflows: Array<{ n: number; amount: number; sign: "positive" | "negative" }>;
+  periods?: number;
+}
+
+const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => {
+  // Determinar el rango de periodos
+  const minPeriod = Math.min(...cashflows.map(flow => flow.n));
+  const maxPeriod = periods ? periods : Math.max(...cashflows.map(flow => flow.n));
+  const totalPeriods = maxPeriod - minPeriod + 1;
+
+  // Encontrar el monto máximo para escalar las flechas
+  const maxAmount = Math.max(...cashflows.map(flow => Math.abs(flow.amount)));
+
+  // Crear un array con todos los periodos
+  const allPeriods = Array.from({ length: totalPeriods }, (_, i) => i + minPeriod);
+
+  // Calcular la altura máxima para las flechas (60% del contenedor)
+  const MAX_ARROW_HEIGHT = 60;
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <div className="min-w-[600px] p-6">
+        {/* Línea de tiempo */}
+        <div className="relative">
+          {/* Contenedor para periodos y flechas con padding extra arriba y abajo */}
+          <div className="flex justify-between relative py-16" style={{ minHeight: '250px' }}>
+            {/* Línea horizontal - Ahora dentro del contenedor flex */}
+            <div className="absolute left-0 right-0 h-0.5 bg-gray-300 top-1/2 transform -translate-y-1/2" />
+
+            {allPeriods.map((period) => {
+              const flow = cashflows.find(f => f.n === period);
+              // Ajustar la escala de la altura para que sea más manejable
+              const arrowHeight = flow ? (Math.abs(flow.amount) / maxAmount) * MAX_ARROW_HEIGHT : 0;
+
+              return (
+                <div key={period} className="flex flex-col items-center justify-center relative" style={{ flex: 1 }}>
+                  {/* Número de periodo - Ahora con más espacio */}
+                  <div className="absolute bottom-0 text-sm font-medium" style={{ bottom: '-2rem' }}>
+                    {period}
+                  </div>
+
+                  {/* Marca vertical en la línea de tiempo */}
+                  <div className="absolute h-3 w-0.5 bg-gray-300 top-1/2 transform -translate-y-1/2" />
+
+                  {/* Flecha si hay flujo */}
+                  {flow && (
+                    <div 
+                      className="absolute top-1/2 transform -translate-y-1/2 flex flex-col items-center"
+                      style={{ 
+                        height: `${arrowHeight}%`,
+                        minHeight: '30px',
+                        maxHeight: '80%', // Limitar la altura máxima
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      {flow.sign === "positive" ? (
+                        <>
+                          <BsArrowUpCircleFill className="text-green-500 text-2xl" />
+                          <div className="h-full w-0.5 bg-green-500 -mt-1" />
+                          <span className="text-sm font-medium text-green-600 mt-1 whitespace-nowrap">
+                            +${flow.amount.toLocaleString()}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-sm font-medium text-red-600 mb-1 whitespace-nowrap">
+                            -${flow.amount.toLocaleString()}
+                          </span>
+                          <div className="h-full w-0.5 bg-red-500 -mb-1" />
+                          <BsArrowDownCircleFill className="text-red-500 text-2xl" />
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CashFlowGraph; 
