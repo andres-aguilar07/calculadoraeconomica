@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import calcular from "@/utils/calculos.utils";
 import CashFlowGraph from './CashFlowGraph';
 
-type CalculationType = 'valueAtN' | 'interestRate' | 'periodsForAmount';
+type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
 
 interface AICalculationProps {
   calculationType: CalculationType;
@@ -24,8 +24,8 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
         interestRate: 0.05,
         periods: 12,
         cashflows: [
-          { n: 0, amount: 1000, sign: "negative" as const },
-          { n: 12, amount: 1200, sign: "positive" as const }
+          { n: 0, monto: 1000, tipo: "salida" as const },
+          { n: 12, monto: 1200, tipo: "entrada" as const }
         ]
       };
 
@@ -33,17 +33,19 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
 
       // Realizar el cálculo con los datos extraídos
       const calculationData = {
-        target: calculationType as "valueAtN" | "interestRate" | "periodsForAmount",
-        inputs: {
-          ...mockExtractedData,
-          targetPeriod: calculationType === "valueAtN" ? 12 : undefined,
-          targetAmount: calculationType === "periodsForAmount" ? 1500 : undefined
+        objetivo: calculationType,
+        entradas: {
+          periodoObjetivo: calculationType === "valorEnN" ? 12 : undefined,
+          montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined,
+          tasaInteres: calculationType === "tasaInteres" ? 0.05 : undefined,
+          periodos: calculationType === "tasaInteres" ? 12 : undefined,
+          flujosEfectivo: calculationType === "tasaInteres" ? mockExtractedData.cashflows : undefined
         }
       };
 
       const result = calcular.resolverEcuacionValor(calculationData);
-      setResultDescription(result.description);
-      setResultValue(result.value.toString());
+      setResultDescription(result.descripcion);
+      setResultValue(result.valor.toString());
     } catch (error) {
       console.error("Error al analizar el problema:", error);
       setResultDescription("Error al analizar el problema");
@@ -102,8 +104,8 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
                   <p className="font-medium">Flujos de efectivo:</p>
                   <ul className="list-disc pl-5">
                     {extractedData.cashflows.map((flow: any, index: number) => (
-                      <li key={index}>
-                        Periodo {flow.n}: {flow.sign === "positive" ? "+" : "-"}${flow.amount}
+                      <li key={index} className="text-sm">
+                        Periodo {flow.n}: {flow.tipo === "entrada" ? "+" : "-"}${flow.monto}
                       </li>
                     ))}
                   </ul>

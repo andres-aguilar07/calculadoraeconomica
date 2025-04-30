@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import calcular from "@/utils/calculos.utils";
 import CashFlowGraph from './CashFlowGraph';
+import convertInterestRate from '@/utils/conversor-tasa.utils';
 
-type CalculationType = 'valueAtN' | 'interestRate' | 'periodsForAmount';
+type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
 
 interface ManualCalculationProps {
-  calculationType: CalculationType;
+  calculationType: ObjetivoCalculo;
 }
 
 const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }) => {
@@ -13,39 +14,47 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   const [selectedInputs, setSelectedInputs] = useState({
     interestRate: false,
     periods: false,
-    cashflows: false
+    cashflows: false,
+    montoObjetivo: false
   });
   
   // Data values state
   const [interestRate, setInterestRate] = useState<string>("");
   const [periods, setPeriods] = useState<string>("");
-  const [cashflows, setCashflows] = useState<Array<{ n: number; amount: number; sign: "positive" | "negative" }>>([]);
+  const [flujos, setFlujos] = useState<Array<{ n: number; monto: number; tipo: "entrada" | "salida" }>>([]);
 
   // * TASA DE INTERES
   const [periodoPago, setPeriodoPago] = useState<string>("anual");
   const [periodoCapitalizacion, setPeriodoCapitalizacion] = useState<string>("anual");
   const [formaPago, setFormaPago] = useState<string>("vencida");
+
+  // * PERIODOS
+  const [periodicidad, setPeriodicidad] = useState<string>("mensual");
   
   // Additional inputs for specific calculations
   const [targetPeriod, setTargetPeriod] = useState<string>("");
-  const [targetAmount, setTargetAmount] = useState<string>("");
+  const [montoObjetivo, setMontoObjetivo] = useState<string>("");
 
   // Result state
   const [resultDescription, setResultDescription] = useState<string>("");
   const [resultValue, setResultValue] = useState<string>("");
 
-  const addCashflow = () => {
-    setCashflows([...cashflows, { n: 0, amount: 0, sign: "positive" }]);
+  const agregarFlujo = () => {
+    // Add new cash flow without sorting
+    setFlujos([...flujos, { n: 0, monto: 0, tipo: "entrada" as "entrada" | "salida" }]);
   };
 
-  const updateCashflow = (index: number, field: keyof typeof cashflows[0], value: any) => {
-    const newCashflows = [...cashflows];
-    newCashflows[index] = { ...newCashflows[index], [field]: value };
-    setCashflows(newCashflows);
+  const actualizarFlujo = (index: number, field: keyof typeof flujos[0], value: any) => {
+    const newFlujos = [...flujos];
+    newFlujos[index] = { ...newFlujos[index], [field]: value };
+    
+    // Removed the automatic reordering when changing period (n)
+    
+    setFlujos(newFlujos);
   };
 
-  const removeCashflow = (index: number) => {
-    setCashflows(cashflows.filter((_, i) => i !== index));
+  const eliminarFlujo = (index: number) => {
+    setFlujos(flujos.filter((_, i) => i !== index));
   };
   
   const handleCheckboxChange = (input: keyof typeof selectedInputs) => {
@@ -54,47 +63,78 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
       [input]: !selectedInputs[input]
     });
     
-    if (input === 'cashflows' && !selectedInputs.cashflows && cashflows.length === 0) {
-      addCashflow();
+    if (input === 'cashflows' && !selectedInputs.cashflows && flujos.length === 0) {
+      agregarFlujo();
     }
   };
   
   const handleCalculate = () => {
-    const calculationData = {
-      target: calculationType,
-      inputs: {
-        interestRate: selectedInputs.interestRate ? parseFloat(interestRate) : undefined,
-        periods: selectedInputs.periods ? parseInt(periods) : undefined,
-        cashflows: selectedInputs.cashflows ? cashflows : undefined,
-        targetPeriod: calculationType === "valueAtN" ? parseInt(targetPeriod) : undefined,
-        targetAmount: calculationType === "periodsForAmount" ? parseFloat(targetAmount) : undefined
+    // Sort the cash flows by period before calculation
+    if (selectedInputs.cashflows && flujos.length > 0) {
+      const sortedFlujos = [...flujos].sort((a, b) => a.n - b.n);
+      setFlujos(sortedFlujos);
+    }
+    
+    let tasaInteresCalculos = selectedInputs.interestRate ? parseFloat(interestRate) : undefined;
+    
+    // Si tenemos tasa de interés y períodos seleccionados, convertimos la tasa
+    if (selectedInputs.interestRate && selectedInputs.periods) {
+      // Convertir la tasa a tasa periódica vencida según la periodicidad de n
+      const fromType = formaPago === "vencida" ? 
+        (periodoPago === periodoCapitalizacion ? "iv" : "Tnv") : 
+        (periodoPago === periodoCapitalizacion ? "ia" : "Tna");
+      
+      // Convertir a tasa periódica vencida según periodicidad de n
+      tasaInteresCalculos = convertInterestRate({
+        value: parseFloat(interestRate),
+        fromType: fromType,
+        fromPeriod: periodoPago as any,
+        toType: "iv", // Siempre queremos tasa periódica vencida
+        toPeriod: periodicidad as any
+      });
+    }
+    
+    const datosCalculo = {
+      objetivo: calculationType,
+      entradas: {
+        tasaInteres: tasaInteresCalculos,
+        periodos: selectedInputs.periods ? parseInt(periods) : undefined,
+        flujosEfectivo: selectedInputs.cashflows ? flujos.map(f => ({
+          n: f.n,
+          monto: f.monto,
+          tipo: f.tipo
+        })) : undefined,
+        periodoObjetivo: calculationType === "valorEnN" ? parseInt(targetPeriod) : undefined,
+        montoObjetivo: calculationType === "periodosParaMonto" ? parseFloat(montoObjetivo) : undefined
       }
     };
     
-    const result = calcular.resolverEcuacionValor(calculationData);
-    setResultDescription(result.description);
-    setResultValue(result.value.toString());
+    const resultado = calcular.resolverEcuacionValor(datosCalculo);
+
+    setResultDescription(resultado.descripcion);
+    setResultValue(resultado.valor.toString());
   };
 
   return (
     <div className="space-y-8">
       {/* Gráfica de flujos */}
-      {selectedInputs.cashflows && cashflows.length > 0 && (
+      {selectedInputs.cashflows && flujos.length > 0 && (
         <div className="border rounded-lg p-4 bg-white shadow-sm">
           <h3 className="text-lg font-medium text-center mb-4">Gráfica de flujos</h3>
           <CashFlowGraph 
-            cashflows={cashflows} 
+            cashflows={flujos} 
             periods={selectedInputs.periods ? parseInt(periods) : undefined}
           />
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Left Column - What data we have */}
+        
         <div className="space-y-6">
           <h3 className="text-lg font-medium text-center">Datos disponibles</h3>
 
           <div className="space-y-4">
+            {/* TASA DE INTERES */}
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -107,51 +147,62 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                 i (tasa de interés)
               </label>
 
-              <div className="flex space-x-2 ml-7">
-                <select
-                  className="p-2 border rounded-md text-sm"
-                  value={periodoPago}
-                  onChange={(e) => setPeriodoPago(e.target.value)}
-                  title="Periodo de Pago"
-                >
-                  <option value="diaria">Diaria</option>
-                  <option value="semanal">Semanal</option>
-                  <option value="quincenal">Quincenal</option>
-                  <option value="mensual">Mensual</option>
-                  <option value="bimestral">Bimestral</option>
-                  <option value="trimestral">Trimestral</option>
-                  <option value="cuatrimestral">Cuatrimestral</option>
-                  <option value="semestral">Semestral</option>
-                  <option value="anual">Anual</option>
-                </select>
+              {selectedInputs.interestRate && (
+                <div className="flex space-x-2 ml-7">
+                  <div className="flex flex-col">
+                    <label className="text-sm text-gray-600 mb-1"><small>Periodo de Pago</small></label>
+                    <select
+                      className="p-2 border rounded-md text-sm"
+                      value={periodoPago}
+                      onChange={(e) => setPeriodoPago(e.target.value)}
+                      title="Periodo de Pago"
+                    >
+                      <option value="diaria">Diaria</option>
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                      <option value="bimestral">Bimestral</option>
+                      <option value="trimestral">Trimestral</option>
+                      <option value="cuatrimestral">Cuatrimestral</option>
+                      <option value="semestral">Semestral</option>
+                      <option value="anual">Anual</option>
+                    </select>
+                  </div>
 
-                <select
-                  className="p-2 border rounded-md text-sm"
-                  value={periodoCapitalizacion}
-                  onChange={(e) => setPeriodoCapitalizacion(e.target.value)}
-                  title="Periodo de Capitalización"
-                >
-                  <option value="diaria">Diaria</option>
-                  <option value="semanal">Semanal</option>
-                  <option value="quincenal">Quincenal</option>
-                  <option value="mensual">Mensual</option>
-                  <option value="bimestral">Bimestral</option>
-                  <option value="trimestral">Trimestral</option>
-                  <option value="cuatrimestral">Cuatrimestral</option>
-                  <option value="semestral">Semestral</option>
-                  <option value="anual">Anual</option>
-                </select>
+                  <div className="flex flex-col">
+                    <label className="text-sm text-gray-600 mb-1"><small>Periodo de Capitalización</small></label>
+                    <select
+                      className="p-2 border rounded-md text-sm"
+                      value={periodoCapitalizacion}
+                      onChange={(e) => setPeriodoCapitalizacion(e.target.value)}
+                      title="Periodo de Capitalización"
+                    >
+                      <option value="diaria">Diaria</option>
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                      <option value="bimestral">Bimestral</option>
+                      <option value="trimestral">Trimestral</option>
+                      <option value="cuatrimestral">Cuatrimestral</option>
+                      <option value="semestral">Semestral</option>
+                      <option value="anual">Anual</option>
+                    </select>
+                  </div>
 
-                <select
-                  className="p-2 border rounded-md text-sm"
-                  value={formaPago}
-                  onChange={(e) => setFormaPago(e.target.value)}
-                  title="Forma de Pago"
-                >
-                  <option value="vencida">Vencida</option>
-                  <option value="anticipada">Anticipada</option>
-                </select>
-              </div>
+                  <div className="flex flex-col">
+                    <label className="text-sm text-gray-600 mb-1"><small>Forma de Pago</small></label>
+                    <select
+                      className="p-2 border rounded-md text-sm"
+                      value={formaPago}
+                      onChange={(e) => setFormaPago(e.target.value)}
+                      title="Forma de Pago"
+                    >
+                      <option value="vencida">Vencida</option>
+                      <option value="anticipada">Anticipada</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
             
             {selectedInputs.interestRate && (
@@ -168,6 +219,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
               </div>
             )}
             
+            {/* PERIODOS */}
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -179,6 +231,28 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
               <label htmlFor="periodsCheck" className="text-md">
                 n (periodos)
               </label>
+
+              {selectedInputs.periods && (
+                <div className="flex flex-col ml-2">
+                  <label className="text-sm text-gray-600 mb-1"><small>Periodicidad</small></label>
+                  <select
+                    className="p-2 border rounded-md text-sm"
+                    value={periodicidad}
+                    onChange={(e) => setPeriodicidad(e.target.value)}
+                    title="Periodicidad"
+                  >
+                    <option value="diaria">Diaria</option>
+                    <option value="semanal">Semanal</option>
+                    <option value="quincenal">Quincenal</option>
+                    <option value="mensual">Mensual</option>
+                    <option value="bimestral">Bimestral</option>
+                    <option value="trimestral">Trimestral</option>
+                    <option value="cuatrimestral">Cuatrimestral</option>
+                    <option value="semestral">Semestral</option>
+                    <option value="anual">Anual</option>
+                  </select>
+                </div>
+              )}
             </div>
             
             {selectedInputs.periods && (
@@ -193,6 +267,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
               </div>
             )}
             
+            {/* FLUJOS DE TRANSACCIONES */}
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -207,54 +282,56 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
             </div>
             
             {selectedInputs.cashflows && (
-              <div className="ml-7 space-y-4">
-                {cashflows.map((cashflow, index) => (
-                  <div key={index} className="p-3 border rounded-md space-y-3 bg-gray-50">
-                    <div className="grid grid-cols-2 gap-2">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold">Flujos de transacciones</h2>
+                <p className="text-sm text-gray-500 mb-4">(Siempre se mantendrán ordenados)</p>
+                
+                <div className="space-y-4">
+                  {flujos.map((flujo, index) => (
+                    <div key={index} className="flex gap-4 items-end">
                       <div>
-                        <label className="block text-sm font-medium">n (periodo)</label>
+                        <label className="block text-sm font-medium">Periodo</label>
                         <input
                           type="number"
-                          value={cashflow.n}
-                          onChange={(e) => updateCashflow(index, "n", parseInt(e.target.value) || 0)}
-                          className="w-full p-2 border rounded-md"
+                          className="mt-1 block p-2 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          value={flujo.n}
+                          onChange={(e) => actualizarFlujo(index, "n", parseInt(e.target.value) || 0)}
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium">Signo</label>
+                        <label className="block text-sm font-medium">Tipo</label>
                         <select
-                          value={cashflow.sign}
-                          onChange={(e) => updateCashflow(index, "sign", e.target.value as "positive" | "negative")}
-                          className="w-full p-2 border rounded-md"
+                          className="mt-1 block p-2 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          value={flujo.tipo}
+                          onChange={(e) => actualizarFlujo(index, "tipo", e.target.value as "entrada" | "salida")}
                         >
-                          <option value="positive">Positivo</option>
-                          <option value="negative">Negativo</option>
+                          <option value="entrada">Entrada</option>
+                          <option value="salida">Salida</option>
                         </select>
                       </div>
-                    </div>
-                    <div className="flex items-end gap-2">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium">Cantidad</label>
+                      <div>
+                        <label className="block text-sm font-medium">Monto</label>
                         <input
                           type="number"
-                          step="0.01"
-                          value={cashflow.amount}
-                          onChange={(e) => updateCashflow(index, "amount", parseFloat(e.target.value) || 0)}
-                          className="w-full p-2 border rounded-md"
+                          className="mt-1 block p-2 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          value={flujo.monto}
+                          onChange={(e) => actualizarFlujo(index, "monto", parseFloat(e.target.value) || 0)}
                         />
                       </div>
                       <button
-                        onClick={() => removeCashflow(index)}
-                        className="bg-red-500 text-white h-10 px-3 rounded-md hover:bg-red-600"
+                        type="button"
+                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        onClick={() => eliminarFlujo(index)}
                       >
                         Eliminar
                       </button>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
                 <button
-                  onClick={addCashflow}
-                  className="w-full px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  type="button"
+                  className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  onClick={agregarFlujo}
                 >
                   + Añadir flujo
                 </button>
@@ -267,7 +344,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
         <div className="space-y-6">
           <h3 className="text-lg font-medium text-center">Datos adicionales</h3>
           <div className="space-y-4">
-            {calculationType === "valueAtN" && (
+            {calculationType === "valorEnN" && (
               <div className="p-4 border rounded-md bg-gray-50 space-y-3">
                 <p className="text-center text-sm font-medium">
                   Calcular el valor en un periodo específico
@@ -285,20 +362,19 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
               </div>
             )}
             
-            {calculationType === "periodsForAmount" && (
+            {calculationType === "periodosParaMonto" && (
               <div className="p-4 border rounded-md bg-gray-50 space-y-3">
                 <p className="text-center text-sm font-medium">
                   Calcular la cantidad de periodos para llegar a un monto
                 </p>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Monto objetivo</label>
+                  <label className="block text-sm font-medium">Monto objetivo</label>
                   <input
                     type="number"
-                    step="0.01"
-                    value={targetAmount}
-                    onChange={(e) => setTargetAmount(e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                    placeholder="Ingrese el monto a alcanzar"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    value={montoObjetivo}
+                    onChange={(e) => setMontoObjetivo(e.target.value)}
+                    disabled={!selectedInputs.montoObjetivo}
                   />
                 </div>
               </div>
@@ -313,8 +389,8 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
               disabled={
                 !calculationType || 
                 (!selectedInputs.interestRate && !selectedInputs.periods && !selectedInputs.cashflows) ||
-                (calculationType === "valueAtN" && !targetPeriod) ||
-                (calculationType === "periodsForAmount" && !targetAmount)
+                (calculationType === "valorEnN" && !targetPeriod) ||
+                (calculationType === "periodosParaMonto" && !montoObjetivo)
               }
               className="bg-green-600 text-white py-3 px-10 rounded-md font-medium hover:bg-green-700 disabled:bg-gray-400"
             >

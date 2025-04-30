@@ -2,18 +2,32 @@ import React from 'react';
 import { BsArrowUpCircleFill, BsArrowDownCircleFill } from 'react-icons/bs';
 
 interface CashFlowGraphProps {
-  cashflows: Array<{ n: number; amount: number; sign: "positive" | "negative" }>;
+  cashflows: Array<{
+    n: number;
+    monto: number;
+    tipo: "entrada" | "salida";
+  }>;
   periods?: number;
 }
 
 const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => {
+  const maxPeriod = periods || Math.max(...cashflows.map(f => f.n));
+  const data = Array.from({ length: maxPeriod + 1 }, (_, i) => {
+    const flujoEnPeriodo = cashflows.find(f => f.n === i);
+    return {
+      periodo: i,
+      valor: flujoEnPeriodo ? 
+        (flujoEnPeriodo.tipo === "entrada" ? flujoEnPeriodo.monto : -flujoEnPeriodo.monto) 
+        : 0
+    };
+  });
+
   // Determinar el rango de periodos
   const minPeriod = Math.min(...cashflows.map(flow => flow.n));
-  const maxPeriod = periods ? periods : Math.max(...cashflows.map(flow => flow.n));
   const totalPeriods = maxPeriod - minPeriod + 1;
 
   // Encontrar el monto máximo para escalar las flechas
-  const maxAmount = Math.max(...cashflows.map(flow => Math.abs(flow.amount)));
+  const maxAmount = Math.max(...cashflows.map(flow => Math.abs(flow.monto)));
 
   // Crear un array con todos los periodos
   const allPeriods = Array.from({ length: totalPeriods }, (_, i) => i + minPeriod);
@@ -34,7 +48,7 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => 
             {allPeriods.map((period) => {
               const flow = cashflows.find(f => f.n === period);
               // Ajustar la escala de la altura para que sea más manejable
-              const arrowHeight = flow ? (Math.abs(flow.amount) / maxAmount) * MAX_ARROW_HEIGHT : 0;
+              const arrowHeight = flow ? (Math.abs(flow.monto) / maxAmount) * MAX_ARROW_HEIGHT : 0;
 
               return (
                 <div key={period} className="flex flex-col items-center justify-center relative" style={{ flex: 1 }}>
@@ -57,18 +71,18 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => 
                         transition: 'all 0.3s ease'
                       }}
                     >
-                      {flow.sign === "positive" ? (
+                      {flow.tipo === "entrada" ? (
                         <>
                           <BsArrowUpCircleFill className="text-green-500 text-2xl" />
                           <div className="h-full w-0.5 bg-green-500 -mt-1" />
                           <span className="text-sm font-medium text-green-600 mt-1 whitespace-nowrap">
-                            +${flow.amount.toLocaleString()}
+                            +${flow.monto.toLocaleString()}
                           </span>
                         </>
                       ) : (
                         <>
                           <span className="text-sm font-medium text-red-600 mb-1 whitespace-nowrap">
-                            -${flow.amount.toLocaleString()}
+                            -${flow.monto.toLocaleString()}
                           </span>
                           <div className="h-full w-0.5 bg-red-500 -mb-1" />
                           <BsArrowDownCircleFill className="text-red-500 text-2xl" />

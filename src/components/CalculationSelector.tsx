@@ -1,6 +1,6 @@
 import React from 'react';
 
-type CalculationType = 'valueAtN' | 'interestRate' | 'periodsForAmount';
+type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
 
 interface CalculationSelectorProps {
   calculationType: CalculationType;
@@ -16,38 +16,38 @@ const CalculationSelector: React.FC<CalculationSelectorProps> = ({
       <div>
         <input
           type="radio"
-          id="valueAtN"
+          id="valorEnN"
           name="calculationType"
-          value="valueAtN"
-          checked={calculationType === 'valueAtN'}
+          value="valorEnN"
+          checked={calculationType === 'valorEnN'}
           onChange={(e) => onCalculationTypeChange(e.target.value as CalculationType)}
           className="mr-2"
         />
-        <label htmlFor="valueAtN">Valor en un periodo específico (n)</label>
+        <label htmlFor="valorEnN">Valor en un periodo específico (n)</label>
       </div>
       <div>
         <input
           type="radio"
-          id="interestRate"
+          id="tasaInteres"
           name="calculationType"
-          value="interestRate"
-          checked={calculationType === 'interestRate'}
+          value="tasaInteres"
+          checked={calculationType === 'tasaInteres'}
           onChange={(e) => onCalculationTypeChange(e.target.value as CalculationType)}
           className="mr-2"
         />
-        <label htmlFor="interestRate">Tasa de interés (i)</label>
+        <label htmlFor="tasaInteres">Tasa de interés (i)</label>
       </div>
       <div>
         <input
           type="radio"
-          id="periodsForAmount"
+          id="periodosParaMonto"
           name="calculationType"
-          value="periodsForAmount"
-          checked={calculationType === 'periodsForAmount'}
+          value="periodosParaMonto"
+          checked={calculationType === 'periodosParaMonto'}
           onChange={(e) => onCalculationTypeChange(e.target.value as CalculationType)}
           className="mr-2"
         />
-        <label htmlFor="periodsForAmount">Periodos para alcanzar un monto</label>
+        <label htmlFor="periodosParaMonto">Periodos para alcanzar un monto</label>
       </div>
     </div>
   );

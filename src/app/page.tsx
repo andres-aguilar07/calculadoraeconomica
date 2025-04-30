@@ -3,10 +3,10 @@ import CalculationSelector from '@/components/CalculationSelector';
 import ManualCalculation from '@/components/ManualCalculation';
 import AICalculation from '@/components/AICalculation';
 
-type CalculationType = 'valueAtN' | 'interestRate' | 'periodsForAmount';
+type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
 
 export default function HomePage() {
-  const [calculationType, setCalculationType] = React.useState<CalculationType>('valueAtN');
+  const [calculationType, setCalculationType] = React.useState<CalculationType>('valorEnN');
   const [calculationMode, setCalculationMode] = React.useState<'manual' | 'ai'>('manual');
 
   return (

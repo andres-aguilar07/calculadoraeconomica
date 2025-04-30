@@ -1,137 +1,148 @@
 // Tipos de cálculo
-type CalculationTarget = 'valueAtN' | 'interestRate' | 'periodsForAmount';
+type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
 
 // Datos de entrada para el cálculo
-interface CalculationInputs {
-    interestRate?: number;
-    periods?: number;
-    cashflows?: Array<{ n: number; amount: number; sign: "positive" | "negative" }>;
-    targetPeriod?: number;
-    targetAmount?: number;
+interface EntradasCalculo {
+    tasaInteres?: number;             // Tasa de interés
+    flujosEfectivo?: Array<{            // Array de flujos de efectivo
+        n: number;                    // Número de periodo
+        monto: number;                  // Monto del flujo
+        tipo: "entrada" | "salida"    // Tipo del flujo (entrada o salida)
+    }>;
+    periodoObjetivo?: number;         // Periodo objetivo para el cálculo
+    periodos?: number;                // Número de periodos
+    montoObjetivo?: number;           // Monto objetivo a alcanzar
 }
 
 // Estructura completa de datos para cálculo
-interface CalculationData {
-    target: CalculationTarget;
-    inputs: CalculationInputs;
+interface DatosCalculo {
+    objetivo: ObjetivoCalculo;
+    entradas: EntradasCalculo;
 }
 
-// Resultados posibles
-interface CalculationResult {
-    value: number;
-    description: string;
+// Resultados del cálculo
+interface ResultadoCalculo {
+    valor: number;
+    descripcion: string;
 }
 
+// Tipo para representar un flujo de efectivo
 type Flujo = {
-    n: number;
-    amount: number;
-    sign: "positive" | "negative";
+    n: number;                // Número de periodo
+    monto: number;           // Monto del flujo
+    tipo: "entrada" | "salida";  // Tipo: entrada (positivo) o salida (negativo)
 };
 
-// Objeto con todas las funciones de cálculo
+// Objeto principal con todas las funciones de cálculo
 const calcular = {
-    resolverEcuacionValor: (data: CalculationData): CalculationResult => {
-        switch (data.target) {
-            case 'valueAtN':
-                return calcularValorEnN(data.inputs);
-            case 'interestRate':
-                return calcularTasaInteres(data.inputs);
-            case 'periodsForAmount':
-                return calcularPeriodosParaMonto(data.inputs);
+    resolverEcuacionValor: (datos: DatosCalculo): ResultadoCalculo => {
+        switch (datos.objetivo) {
+            case 'valorEnN':
+                return calcularValorEnN(datos.entradas);
+            case 'tasaInteres':
+                return calcularTasaInteres(datos.entradas);
+            case 'periodosParaMonto':
+                return calcularPeriodosParaMonto(datos.entradas);
             default:
                 throw new Error('Tipo de cálculo no válido');
         }
     }
 };
 
-// ! CASO 1: Valor en un periodo
-function calcularValorEnN(inputs: CalculationInputs): CalculationResult {
-    console.log("fn calcularValorEnN");
-    console.log("inputs: ", inputs);
+// ! CASO 1: Calcular el valor en un periodo específico
+function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
+    console.log("Función: calcularValorEnN");
+    console.log("Entradas: ", entradas);
 
-    const { interestRate, periods, cashflows, targetPeriod } = inputs;
+    const { tasaInteres, flujosEfectivo, periodoObjetivo } = entradas;
 
     // * Validaciones
-    if (!interestRate || !periods || !cashflows) {
+    if (!tasaInteres || !flujosEfectivo) {
         throw new Error('Faltan datos necesarios para el cálculo');
     }
 
-    if (cashflows.length === 0) {
-        throw new Error('Faltan datos necesarios para el cálculo');
+    if (flujosEfectivo.length === 0) {
+        throw new Error('No hay flujos de efectivo para calcular');
     }
 
-    if (targetPeriod === undefined || targetPeriod === null) {
-        throw new Error('Faltan datos necesarios para el cálculo');
+    if (periodoObjetivo === undefined || periodoObjetivo === null) {
+        throw new Error('Falta especificar el periodo objetivo');
     }
 
-    // * Calculo
-    // Calcular el valor total en el periodo objetivo sumando todos los flujos
-    const valorTotal = cashflows.reduce((acumulado, flujo) => {
-        return acumulado + calcularValorFlujoEnN(flujo, targetPeriod, interestRate);
-    }, 0);
+    // Determinar si hay flujos anteriores al periodo objetivo
+    const existenFlujosAnteriores = flujosEfectivo.some(flujo => flujo.n <= periodoObjetivo);
+    
+    // * Cálculo del valor total
+    let valorTotal = 0;
+    
+    // Si estamos calculando el valor presente o un periodo anterior a todos los flujos,
+    // o no hay flujos anteriores al periodo objetivo, considerar todos
+    const flujosRelevantes = (periodoObjetivo === 0 || !existenFlujosAnteriores) 
+        ? flujosEfectivo 
+        : flujosEfectivo.filter(flujo => flujo.n <= periodoObjetivo);
+    
+    for (const flujo of flujosRelevantes) {
+        const valor_calculado = calcularValorFlujoEnN(flujo, periodoObjetivo, tasaInteres);
+        console.log("Valor calculado para el flujo: ", flujo, " es: ", valor_calculado);
+        valorTotal += valor_calculado;
+    }
 
-    console.log("valorTotal: ", valorTotal);
+    console.log("Valor total calculado: ", valorTotal);
 
     const valorRedondeado = Math.round(valorTotal * 100) / 100;
 
     return {
-        value: valorRedondeado,
-        description: `Valor calculado en el periodo ${targetPeriod}`
+        valor: valorRedondeado,
+        descripcion: `Valor calculado en el periodo ${periodoObjetivo}`
     };
 }
 
 // * funcion auxiliar para calcular el valor de un flujo en el periodo objetivo
 // Función auxiliar para calcular el valor de un flujo en el periodo objetivo
 function calcularValorFlujoEnN(
-    flujo: { n: number; amount: number; sign: "positive" | "negative" },
+    flujo: Flujo,
     targetPeriod: number,
     interestRate: number): number {
+
     // Si el flujo está en el mismo periodo objetivo, retornar la cantidad directamente
     if (flujo.n === targetPeriod) {
-        return flujo.amount * (flujo.sign === "positive" ? 1 : -1);
+        return flujo.monto * (flujo.tipo === "entrada" ? 1 : -1);
     }
 
     const distanciaPeriodos = Math.abs(flujo.n - targetPeriod);
+    const factor = flujo.tipo === "entrada" ? 1 : -1;
 
-    if (flujo.n < targetPeriod) {
-        // Flujo está antes del periodo objetivo - multiplicar
-        return flujo.amount * Math.pow(1 + interestRate, distanciaPeriodos) *
-            (flujo.sign === "positive" ? 1 : -1);
+    // Si el periodo objetivo es anterior al flujo, traer el valor al presente
+    if (targetPeriod < flujo.n) {
+        return flujo.monto / Math.pow(1 + interestRate, distanciaPeriodos) * factor;
     } else {
-        if (flujo.sign === "positive") {
-            return 0;
-        }
-        // Flujo está después del periodo objetivo - dividir
-        return flujo.amount / Math.pow(1 + interestRate, distanciaPeriodos) *
-            (flujo.sign === "negative" ? -1 : 1);
+        // Si el periodo objetivo es posterior al flujo, llevar el valor a futuro
+        return flujo.monto * Math.pow(1 + interestRate, distanciaPeriodos) * factor;
     }
 }
 
-// ! CASO 2: Tasa de interés
-function calcularTasaInteres(inputs: CalculationInputs): CalculationResult {
-    console.log("fn calcularTasaInteres");
-
-    console.log("inputs: ", inputs);
+// ! CASO 2: Calcular la tasa de interés
+function calcularTasaInteres(entradas: EntradasCalculo): ResultadoCalculo {
+    console.log("Función: calcularTasaInteres");
+    console.log("Entradas: ", entradas);
     
-    const { cashflows, periods } = inputs;
+    const { flujosEfectivo, periodos } = entradas;
 
-    if (!cashflows || !periods) {
+    if (!flujosEfectivo || !periodos) {
         throw new Error('Faltan datos necesarios para el cálculo');
     }
 
-    if (cashflows.length === 0) {
-        throw new Error('Faltan datos necesarios para el cálculo');
+    if (flujosEfectivo.length === 0) {
+        throw new Error('No hay flujos de efectivo para calcular');
     }
 
-    const tasaInteres = calcularTIR(cashflows, periods);
+    const tasaInteres = calcularTIR(flujosEfectivo, periodos);
 
-    console.log("tasaInteres: ", tasaInteres);
-
-    // const valorRedondeado = Math.round((tasaInteres || 0) * 10000000) / 10000000;
+    console.log("Tasa de interés calculada: ", tasaInteres);
 
     return {
-        value: tasaInteres || 0,
-        description: 'Tasa de interés calculada (en forma decimal)'
+        valor: tasaInteres || 0,
+        descripcion: 'Tasa de interés calculada (en forma decimal)'
     };
 }
 
@@ -177,31 +188,30 @@ function calcularTIR(
     return null; // No convergió
 }
 
-// ! CASO 3: Periodos para alcanzar un monto
-function calcularPeriodosParaMonto(inputs: CalculationInputs): CalculationResult {
-    console.log("fn calcularPeriodosParaMonto");
+// ! CASO 3: Calcular periodos necesarios para alcanzar un monto
+function calcularPeriodosParaMonto(entradas: EntradasCalculo): ResultadoCalculo {
+    console.log("Función: calcularPeriodosParaMonto");
+    console.log("Entradas: ", entradas);
     
-    console.log("inputs: ", inputs);
-    
-    const { interestRate, cashflows, targetAmount } = inputs;
+    const { tasaInteres, flujosEfectivo, montoObjetivo } = entradas;
 
     // * Validaciones
-    if (!interestRate || !cashflows || !targetAmount) {
+    if (!tasaInteres || !flujosEfectivo || !montoObjetivo) {
         throw new Error('Faltan datos necesarios para el cálculo');
     }
 
-    if (cashflows.length === 0) {
-        throw new Error('Faltan datos necesarios para el cálculo');
+    if (flujosEfectivo.length === 0) {
+        throw new Error('No hay flujos de efectivo para calcular');
     }
 
     // Encontrar el periodo más grande entre los flujos
-    const ultimoPeriodo = Math.max(...cashflows.map(flujo => flujo.n));
+    const ultimoPeriodo = Math.max(...flujosEfectivo.map(flujo => flujo.n));
     console.log(`Último periodo de los flujos: ${ultimoPeriodo}`);
     
     // Función para calcular el valor en un periodo específico
     const calcularValorEnPeriodo = (periodo: number): number => {
-        return cashflows.reduce((acumulado, flujo) => {
-            return acumulado + calcularValorFlujoEnN(flujo, periodo, interestRate);
+        return flujosEfectivo.reduce((acumulado, flujo) => {
+            return acumulado + calcularValorFlujoEnN(flujo, periodo, tasaInteres);
         }, 0);
     };
 
@@ -214,25 +224,25 @@ function calcularPeriodosParaMonto(inputs: CalculationInputs): CalculationResult
     
     // Verificar si el valor en el último periodo ya alcanza o supera el monto objetivo
     const valorUltimoPeriodo = calcularValorEnPeriodo(ultimoPeriodo);
-    console.log(`Valor en periodo ${ultimoPeriodo}: ${valorUltimoPeriodo}, Target: ${targetAmount}`);
+    console.log(`Valor en periodo ${ultimoPeriodo}: ${valorUltimoPeriodo}, Target: ${montoObjetivo}`);
     
-    if (valorUltimoPeriodo >= targetAmount) {
+    if (valorUltimoPeriodo >= montoObjetivo) {
         // Si ya se alcanza el objetivo, buscar hacia atrás (interpolación)
         if (ultimoPeriodo > 0) {
             const valorPeriodoAnterior = calcularValorEnPeriodo(ultimoPeriodo - 1);
             // Interpolación lineal para encontrar el periodo exacto
             const diferencia = valorUltimoPeriodo - valorPeriodoAnterior;
-            const fraccion = (targetAmount - valorPeriodoAnterior) / diferencia;
+            const fraccion = (montoObjetivo - valorPeriodoAnterior) / diferencia;
             const periodoExacto = ultimoPeriodo - 1 + fraccion;
             
             return {
-                value: Math.round(periodoExacto * 1000) / 1000, // Redondear a 3 decimales
-                description: `Periodos necesarios para alcanzar exactamente el monto de ${targetAmount}`
+                valor: Math.round(periodoExacto * 1000) / 1000, // Redondear a 3 decimales
+                descripcion: `Periodos necesarios para alcanzar exactamente el monto de ${montoObjetivo}`
             };
         }
         return {
-            value: ultimoPeriodo,
-            description: `El monto objetivo ${targetAmount} ya se alcanza en el periodo ${ultimoPeriodo}`
+            valor: ultimoPeriodo,
+            descripcion: `El monto objetivo ${montoObjetivo} ya se alcanza en el periodo ${ultimoPeriodo}`
         };
     }
     
@@ -240,9 +250,9 @@ function calcularPeriodosParaMonto(inputs: CalculationInputs): CalculationResult
     let periodoEntero = ultimoPeriodo + 1;
     while (periodoEntero <= MAX_PERIODOS) {
         const valor = calcularValorEnPeriodo(periodoEntero);
-        console.log(`Periodo ${periodoEntero}: Valor ${valor}, Target: ${targetAmount}`);
+        console.log(`Periodo ${periodoEntero}: Valor ${valor}, Target: ${montoObjetivo}`);
         
-        if (valor >= targetAmount) {
+        if (valor >= montoObjetivo) {
             break; // Encontramos el periodo entero donde se supera el monto
         }
         
@@ -251,8 +261,8 @@ function calcularPeriodosParaMonto(inputs: CalculationInputs): CalculationResult
     
     if (periodoEntero > MAX_PERIODOS) {
         return {
-            value: -1,
-            description: 'No se encontró un periodo que alcance el monto deseado dentro del límite de periodos considerados'
+            valor: -1,
+            descripcion: 'No se encontró un periodo que alcance el monto deseado dentro del límite de periodos considerados'
         };
     }
     
@@ -260,12 +270,12 @@ function calcularPeriodosParaMonto(inputs: CalculationInputs): CalculationResult
     const valorPeriodoAnterior = calcularValorEnPeriodo(periodoEntero - 1);
     const valorPeriodoActual = calcularValorEnPeriodo(periodoEntero);
     const diferencia = valorPeriodoActual - valorPeriodoAnterior;
-    const fraccion = (targetAmount - valorPeriodoAnterior) / diferencia;
+    const fraccion = (montoObjetivo - valorPeriodoAnterior) / diferencia;
     const periodoExacto = periodoEntero - 1 + fraccion;
     
     return {
-        value: Math.round(periodoExacto * 1000) / 1000, // Redondear a 3 decimales
-        description: `Periodos necesarios para alcanzar exactamente el monto de ${targetAmount}`
+        valor: Math.round(periodoExacto * 1000) / 1000, // Redondear a 3 decimales
+        descripcion: `Periodos necesarios para alcanzar exactamente el monto de ${montoObjetivo}`
     };
 }
 
