@@ -152,7 +152,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   };
 
   const botonCalcularDisabled =
-    !selectedInputs.interestRate ||
+    // !selectedInputs.interestRate ||
     !selectedInputs.cashflows ||
     flujos.length === 0 ||
     (calculationType === "valorEnN" && !targetPeriod) ||
