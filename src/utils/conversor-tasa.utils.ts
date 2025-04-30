@@ -91,33 +91,42 @@ function convertirAEfectivaAnual(
     mPago: number, 
     mCap: number
 ): number {
+    console.warn("fn convertirAEfectivaAnual");
+
+    console.log("valor: ", valor);
+    console.log("tipo: ", tipo);
+    console.log("mPago: ", mPago);
+    console.log("mCap: ", mCap);
+
     switch (tipo) {
         case "E":
             return valor;
             
         case "Tnv": {
-
-            // Tnv -> iev -> E
-            const iev = valor / mPago;
-            return Math.pow(1 + iev, mCap) - 1;
+            // Tnv -> E
+            return Math.pow(1 + (valor / mCap), mCap) - 1;
         }
             
         case "iev": {
-            // iev -> E
-            return Math.pow(1 + valor, mCap) - 1;
+            // iev -> Tnv -> E
+            const tnv = valor * mPago;
+            return Math.pow(1 + (tnv / mCap), mCap) - 1;
         }
             
         case "iea": {
-            // iea -> iev -> E
+            // iea -> iev -> Tnv -> E
             const iev = valor / (1 - valor);
-            return Math.pow(1 + iev, mCap) - 1;
+            const tnv = iev * mPago;
+            return Math.pow(1 + (tnv / mCap), mCap) - 1;
         }
             
         case "Tna": {
-            // Tna -> iea -> iev -> E
+            // Tna -> iea -> iev -> Tnv -> E
             const iea = valor / mCap;
             const iev = iea / (1 - iea);
-            return Math.pow(1 + iev, mCap) - 1;
+            const tnv = iev * mCap;
+
+            return Math.pow(1 + (tnv / mCap), mCap) - 1;
         }
             
         default:
@@ -134,6 +143,13 @@ function convertirDesdeEfectivaAnual(
     mPago: number, 
     mCap: number
 ): number {
+    console.warn("fn convertirDesdeEfectivaAnual");
+
+    console.log("tasaEfectivaAnual: ", tasaEfectivaAnual);
+    console.log("tipoDestino: ", tipoDestino);
+    console.log("mPago: ", mPago);
+    console.log("mCap: ", mCap);
+
     switch (tipoDestino) {
         case "E":
             return tasaEfectivaAnual;
@@ -146,7 +162,9 @@ function convertirDesdeEfectivaAnual(
             
         case "iev": {
             // E -> iev
-            return Math.pow(1 + tasaEfectivaAnual, 1 / mCap) - 1;
+            const iev = Math.pow(1 + tasaEfectivaAnual, 1 / mCap) - 1;
+            console.log("iev: ", iev);
+            return iev;
         }
             
         case "iea": {
