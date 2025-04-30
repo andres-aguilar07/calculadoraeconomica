@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import calcular from "@/utils/calculos.utils";
 import CashFlowGraph from './CashFlowGraph';
 
-type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
+type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
 
 interface AICalculationProps {
   calculationType: CalculationType;
@@ -29,17 +29,22 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
         ]
       };
 
+      // Para incognitaX, simular un flujo con monto 0 para la incógnita
+      if (calculationType === 'incognitaX') {
+        mockExtractedData.cashflows.push({ n: 6, monto: 0, tipo: "entrada" as const });
+      }
+
       setExtractedData(mockExtractedData);
 
       // Realizar el cálculo con los datos extraídos
       const calculationData = {
         objetivo: calculationType,
         entradas: {
+          tasaInteres: mockExtractedData.interestRate,
+          periodos: mockExtractedData.periods,
+          flujosEfectivo: mockExtractedData.cashflows,
           periodoObjetivo: calculationType === "valorEnN" ? 12 : undefined,
-          montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined,
-          tasaInteres: calculationType === "tasaInteres" ? 0.05 : undefined,
-          periodos: calculationType === "tasaInteres" ? 12 : undefined,
-          flujosEfectivo: calculationType === "tasaInteres" ? mockExtractedData.cashflows : undefined
+          montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined
         }
       };
 

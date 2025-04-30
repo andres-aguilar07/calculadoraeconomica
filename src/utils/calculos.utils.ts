@@ -1,12 +1,12 @@
 // Tipos de cálculo
-type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
+type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
 
 // Datos de entrada para el cálculo
 interface EntradasCalculo {
     tasaInteres?: number;             // Tasa de interés
     flujosEfectivo?: Array<{            // Array de flujos de efectivo
         n: number;                    // Número de periodo
-        monto: number;                  // Monto del flujo
+        monto: number | string;       // Monto del flujo (puede ser un número o una expresión con 'x')
         tipo: "entrada" | "salida"    // Tipo del flujo (entrada o salida)
     }>;
     periodoObjetivo?: number;         // Periodo objetivo para el cálculo
@@ -29,7 +29,7 @@ interface ResultadoCalculo {
 // Tipo para representar un flujo de efectivo
 type Flujo = {
     n: number;                // Número de periodo
-    monto: number;           // Monto del flujo
+    monto: number | string;   // Monto del flujo (puede ser un número o una expresión con 'x')
     tipo: "entrada" | "salida";  // Tipo: entrada (positivo) o salida (negativo)
 };
 
@@ -43,6 +43,8 @@ const calcular = {
                 return calcularTasaInteres(datos.entradas);
             case 'periodosParaMonto':
                 return calcularPeriodosParaMonto(datos.entradas);
+            case 'incognitaX':
+                return calcularIncognitaX(datos.entradas);
             default:
                 throw new Error('Tipo de cálculo no válido');
         }
@@ -50,56 +52,6 @@ const calcular = {
 };
 
 // ! CASO 1: Calcular el valor en un periodo específico
-// function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
-
-//     console.warn("fn calcularValorEnN");
-    
-//     console.log("entradas: ", entradas);
-    
-
-//     const { tasaInteres, flujosEfectivo, periodoObjetivo } = entradas;
-
-//     if (tasaInteres === undefined || !flujosEfectivo || periodoObjetivo === undefined) {
-//         throw new Error('Faltan datos necesarios para el cálculo');
-//     }
-
-//     let sumaEntradas = 0;
-//     let sumaSalidas = 0;
-
-//     for (const flujo of flujosEfectivo) {
-//         const t = Math.abs(flujo.n - periodoObjetivo);
-
-//         let factorAjuste = 1;
-
-//         if (t !== 0) {
-//             factorAjuste = Math.pow(1 + tasaInteres, -t); // si t > 0, descontamos; si t < 0, capitalizamos
-//         }
-
-//         const valorEquivalente = flujo.monto * factorAjuste;
-
-//         if (flujo.tipo === "entrada") {
-//             sumaEntradas += valorEquivalente;
-//         } else if (flujo.tipo === "salida") {
-//             sumaSalidas += valorEquivalente;
-//         } else {
-//             throw new Error(`Tipo de flujo inválido: ${flujo.tipo}`);
-//         }
-//     }
-
-//     console.log("sumaEntradas: ", sumaEntradas);
-//     console.log("sumaSalidas: ", sumaSalidas);
-    
-
-//     const valorTotal = sumaEntradas - sumaSalidas;
-
-//     return {
-//         valor: Math.abs(Math.round(valorTotal * 100) / 100),
-//         descripcion: `Valor equivalente de los flujos en el periodo ${periodoObjetivo}`
-//     };
-// }
-
-
-
 function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
     console.log("Función: calcularValorEnN");
     console.log("Entradas: ", entradas);
@@ -119,6 +71,11 @@ function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
         throw new Error('Falta especificar el periodo objetivo');
     }
 
+    // Verificar que no hay flujos con expresiones X
+    if (flujosEfectivo.some(flujo => typeof flujo.monto === 'string' && String(flujo.monto).toLowerCase().includes('x'))) {
+        throw new Error('No se puede calcular valorEnN con flujos que contienen expresiones con X. Use calcularIncognitaX para resolver la incógnita X primero.');
+    }
+
     // Determinar si hay flujos anteriores al periodo objetivo
     const existenFlujosAnteriores = flujosEfectivo.some(flujo => flujo.n <= periodoObjetivo);
     
@@ -132,6 +89,14 @@ function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
         : flujosEfectivo.filter(flujo => flujo.n <= periodoObjetivo);
     
     for (const flujo of flujosRelevantes) {
+        // Asegurarse de que el monto sea un número
+        if (typeof flujo.monto === 'string') {
+            flujo.monto = parseFloat(flujo.monto);
+            if (isNaN(flujo.monto)) {
+                throw new Error(`Valor de monto inválido: ${flujo.monto}. Debe ser un número o una expresión con X.`);
+            }
+        }
+        
         const valor_calculado = calcularValorFlujoEnN(flujo, periodoObjetivo, tasaInteres);
         console.log("Valor calculado para el flujo: ", flujo, " es: ", valor_calculado);
         valorTotal += valor_calculado;
@@ -155,6 +120,11 @@ function calcularValorFlujoEnN(
     flujo: Flujo,
     targetPeriod: number,
     interestRate: number): number {
+
+    // Si el flujo tiene una expresión con X, no calculamos aquí
+    if (typeof flujo.monto === 'string') {
+        throw new Error('No se puede calcular un flujo con expresión X en calcularValorFlujoEnN');
+    }
 
     // Si el flujo está en el mismo periodo objetivo, retornar la cantidad directamente
     if (flujo.n === targetPeriod) {
@@ -204,12 +174,29 @@ function calcularTIR(
     targetPeriod: number = 0,
     precision: number = 1e-6
 ): number | null {
+    // Verificar que no hay flujos con expresiones X
+    if (flujos.some(flujo => typeof flujo.monto === 'string' && String(flujo.monto).toLowerCase().includes('x'))) {
+        throw new Error('No se puede calcular TIR con flujos que contienen expresiones con X. Use calcularIncognitaX para resolver la incógnita X primero.');
+    }
+
+    // Convertir todos los montos a números si son cadenas válidas
+    const flujosNumericos = flujos.map(flujo => {
+        if (typeof flujo.monto === 'string') {
+            const montoNumerico = parseFloat(flujo.monto);
+            if (isNaN(montoNumerico)) {
+                throw new Error(`Valor de monto inválido: ${flujo.monto}. Debe ser un número para calcular TIR.`);
+            }
+            return { ...flujo, monto: montoNumerico };
+        }
+        return flujo;
+    });
+
     let lower = -0.99; // Para permitir tasas negativas (pero no -1 o menor)
     let upper = 1.0;   // Supongamos que la tasa no es mayor al 100%
 
     // * Funcion auxiliar para calcular el valor presente neto
     const calcularVPN = (rate: number) => {
-        return flujos.reduce((total, flujo) => {
+        return flujosNumericos.reduce((total, flujo) => {
             return total + calcularValorFlujoEnN(flujo, targetPeriod, rate);
         }, 0);
     };
@@ -256,13 +243,30 @@ function calcularPeriodosParaMonto(entradas: EntradasCalculo): ResultadoCalculo 
         throw new Error('No hay flujos de efectivo para calcular');
     }
 
+    // Verificar que no hay flujos con expresiones X
+    if (flujosEfectivo.some(flujo => typeof flujo.monto === 'string' && String(flujo.monto).toLowerCase().includes('x'))) {
+        throw new Error('No se puede calcular periodosParaMonto con flujos que contienen expresiones con X. Use calcularIncognitaX para resolver la incógnita X primero.');
+    }
+
+    // Convertir todos los montos a números si son cadenas válidas
+    const flujosNumericos = flujosEfectivo.map(flujo => {
+        if (typeof flujo.monto === 'string') {
+            const montoNumerico = parseFloat(flujo.monto);
+            if (isNaN(montoNumerico)) {
+                throw new Error(`Valor de monto inválido: ${flujo.monto}. Debe ser un número para calcular periodos.`);
+            }
+            return { ...flujo, monto: montoNumerico };
+        }
+        return flujo;
+    });
+
     // Encontrar el periodo más grande entre los flujos
-    const ultimoPeriodo = Math.max(...flujosEfectivo.map(flujo => flujo.n));
+    const ultimoPeriodo = Math.max(...flujosNumericos.map(flujo => flujo.n));
     console.log(`Último periodo de los flujos: ${ultimoPeriodo}`);
     
     // Función para calcular el valor en un periodo específico
     const calcularValorEnPeriodo = (periodo: number): number => {
-        return flujosEfectivo.reduce((acumulado, flujo) => {
+        return flujosNumericos.reduce((acumulado, flujo) => {
             return acumulado + calcularValorFlujoEnN(flujo, periodo, tasaInteres);
         }, 0);
     };
@@ -328,6 +332,148 @@ function calcularPeriodosParaMonto(entradas: EntradasCalculo): ResultadoCalculo 
     return {
         valor: Math.round(periodoExacto * 1000) / 1000, // Redondear a 3 decimales
         descripcion: `Periodos necesarios para alcanzar exactamente el monto de ${montoObjetivo}`
+    };
+}
+
+// ! CASO 4: Calcular incógnita X en flujos de transacciones
+function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
+    console.log("Función: calcularIncognitaX");
+    console.log("Entradas: ", entradas);
+
+    const { tasaInteres, flujosEfectivo } = entradas;
+
+    // * Validaciones
+    if (!tasaInteres || !flujosEfectivo) {
+        throw new Error('Faltan datos necesarios para el cálculo');
+    }
+
+    if (flujosEfectivo.length === 0) {
+        throw new Error('No hay flujos de efectivo para calcular');
+    }
+
+    // Identificar los flujos que contienen X y los que son solo numéricos
+    const flujosConX: Array<{flujo: Flujo, coeficiente: number}> = [];
+    const flujosNumericos: Array<Flujo> = [];
+
+    // Regex para buscar expresiones con X y extraer su coeficiente
+    const regexX = /^([-+]?\s*(?:\d*\.\d+|\d+)?)\s*[xX](?:\s*\/\s*(\d+(?:\.\d+)?))?$/;
+    
+    for (const flujo of flujosEfectivo) {
+        if (typeof flujo.monto === 'string') {
+            const montoStr = flujo.monto.trim().toLowerCase();
+            
+            // Verificar si contiene X
+            if (montoStr.includes('x')) {
+                const match = montoStr.match(regexX);
+                
+                if (match) {
+                    let coeficiente = 1; // Por defecto, si solo se escribe 'x'
+                    
+                    // Si hay un coeficiente antes de X (ej: 2x, 0.5x, -3x)
+                    if (match[1] && match[1].trim() !== '' && match[1].trim() !== '+') {
+                        coeficiente = match[1].trim() === '-' ? -1 : parseFloat(match[1]);
+                    }
+                    
+                    // Si X está dividida (ej: x/5, x/3)
+                    if (match[2]) {
+                        coeficiente /= parseFloat(match[2]);
+                    }
+                    
+                    flujosConX.push({
+                        flujo,
+                        coeficiente
+                    });
+                    continue;
+                }
+            }
+            
+            // Si no se detectó una expresión válida con X, intentar convertir a número
+            try {
+                const montoNumerico = parseFloat(montoStr);
+                if (!isNaN(montoNumerico)) {
+                    // Crear una copia del flujo con el monto como número
+                    flujosNumericos.push({
+                        ...flujo,
+                        monto: montoNumerico
+                    });
+                } else {
+                    throw new Error(`No se pudo interpretar el monto: "${flujo.monto}"`);
+                }
+            } catch (error) {
+                throw new Error(`No se pudo interpretar el monto: "${flujo.monto}"`);
+            }
+        } else {
+            // Si ya es un número, solo lo añadimos a los flujos numéricos
+            flujosNumericos.push(flujo);
+        }
+    }
+
+    // Verificar que al menos hay un flujo con X
+    if (flujosConX.length === 0) {
+        throw new Error('No se encontró ningún flujo que contenga la incógnita X');
+    }
+
+    // Calcular el valor de los flujos numéricos
+    // Para cada flujo con X, obtener su coeficiente y llevarlo al mismo período
+    // mediante tasas de interés, igual que en el cálculo normal
+    let coeficientesX = 0;
+    let terminosIndependientes = 0;
+
+    // Calcular los coeficientes de X
+    for (const { flujo, coeficiente } of flujosConX) {
+        // El periodo de referencia será el del primer flujo con X
+        const periodoReferencia = flujosConX[0].flujo.n;
+        
+        let coeficienteAjustado = coeficiente;
+        
+        // Ajustar el coeficiente según la posición temporal respecto al período de referencia
+        if (flujo.n !== periodoReferencia) {
+            const distanciaPeriodos = Math.abs(flujo.n - periodoReferencia);
+            
+            if (flujo.n < periodoReferencia) {
+                // Si el flujo es anterior al período de referencia, llevarlo al futuro
+                coeficienteAjustado *= Math.pow(1 + tasaInteres, distanciaPeriodos);
+            } else {
+                // Si el flujo es posterior al período de referencia, traerlo al presente
+                coeficienteAjustado /= Math.pow(1 + tasaInteres, distanciaPeriodos);
+            }
+        }
+        
+        // El signo depende del tipo de flujo
+        const signo = flujo.tipo === "entrada" ? 1 : -1;
+        coeficientesX += coeficienteAjustado * signo;
+    }
+
+    // Calcular los términos independientes (flujos numéricos)
+    for (const flujo of flujosNumericos) {
+        // Usar el mismo período de referencia que para X
+        const periodoReferencia = flujosConX[0].flujo.n;
+        const valorEnPeriodoReferencia = calcularValorFlujoEnN(flujo, periodoReferencia, tasaInteres);
+        
+        // Los sumamos pero con signo negativo porque pasarán al otro lado de la ecuación
+        terminosIndependientes -= valorEnPeriodoReferencia;
+    }
+
+    // La ecuación queda: coeficientesX * X = terminosIndependientes
+    // Por lo tanto: X = terminosIndependientes / coeficientesX
+    
+    if (coeficientesX === 0) {
+        throw new Error('El coeficiente de X es 0, no se puede despejar la ecuación');
+    }
+    
+    const valorX = terminosIndependientes / coeficientesX;
+    
+    // Redondear a 2 decimales preservando el signo
+    const valorRedondeado = Math.round(valorX * 100) / 100;
+    
+    // Preparar una descripción detallada de la resolución
+    const periodoReferencia = flujosConX[0].flujo.n;
+    const ecuacion = `${coeficientesX.toFixed(2)}X = ${terminosIndependientes.toFixed(2)}`;
+    const calculo = `X = ${terminosIndependientes.toFixed(2)} / ${coeficientesX.toFixed(2)}`;
+    
+    return {
+        valor: valorRedondeado,
+        descripcion: `Valor de X en el periodo ${periodoReferencia}: ${ecuacion}, por lo tanto ${calculo} = ${valorRedondeado}`
     };
 }
 

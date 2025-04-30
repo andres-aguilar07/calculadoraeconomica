@@ -1,6 +1,6 @@
 import React from 'react';
 
-type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
+type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
 
 interface CalculationSelectorProps {
   calculationType: CalculationType;
@@ -48,6 +48,18 @@ const CalculationSelector: React.FC<CalculationSelectorProps> = ({
           className="mr-2"
         />
         <label htmlFor="periodosParaMonto">Periodos para alcanzar un monto</label>
+      </div>
+      <div>
+        <input
+          type="radio"
+          id="incognitaX"
+          name="calculationType"
+          value="incognitaX"
+          checked={calculationType === 'incognitaX'}
+          onChange={(e) => onCalculationTypeChange(e.target.value as CalculationType)}
+          className="mr-2"
+        />
+        <label htmlFor="incognitaX">Hallar incógnita (X) en flujos</label>
       </div>
     </div>
   );

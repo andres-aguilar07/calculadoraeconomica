@@ -3,7 +3,7 @@ import calcular from "@/utils/calculos.utils";
 import CashFlowGraph from './CashFlowGraph';
 import convertInterestRate from '@/utils/conversor-tasa.utils';
 
-type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto';
+type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
 
 interface ManualCalculationProps {
   calculationType: ObjetivoCalculo;
@@ -21,7 +21,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   // Data values state
   const [interestRate, setInterestRate] = useState<string>("");
   const [periods, setPeriods] = useState<string>("");
-  const [flujos, setFlujos] = useState<Array<{ n: number; monto: number; tipo: "entrada" | "salida" }>>([]);
+  const [flujos, setFlujos] = useState<Array<{ n: number; monto: number | string; tipo: "entrada" | "salida" }>>([]);
 
   // * TASA DE INTERES
   const [periodoPago, setPeriodoPago] = useState<string>("anual");
@@ -46,15 +46,34 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
 
   const actualizarFlujo = (index: number, field: keyof typeof flujos[0], value: any) => {
     const newFlujos = [...flujos];
-    newFlujos[index] = { ...newFlujos[index], [field]: value };
     
-    // Removed the automatic reordering when changing period (n)
+    // Para el campo monto, si estamos en el modo incognitaX y el valor es una cadena,
+    // permitimos que sea una expresión como "x", "2x", "x/5", etc.
+    if (field === "monto" && calculationType === "incognitaX" && typeof value === "string") {
+      // Actualizamos directamente sin convertir a número
+      newFlujos[index] = { ...newFlujos[index], [field]: value };
+    } else {
+      // Comportamiento normal para otros campos o modos
+      newFlujos[index] = { ...newFlujos[index], [field]: value };
+    }
     
     setFlujos(newFlujos);
   };
 
   const eliminarFlujo = (index: number) => {
     setFlujos(flujos.filter((_, i) => i !== index));
+  };
+  
+  const agregarFlujoIncognita = () => {
+    // Add a new cash flow with "x" to represent the X incognita
+    setFlujos([...flujos, { n: 0, monto: "x", tipo: "entrada" as "entrada" | "salida" }]);
+    // Also make sure cashflows are selected
+    if (!selectedInputs.cashflows) {
+      setSelectedInputs({
+        ...selectedInputs,
+        cashflows: true
+      });
+    }
   };
   
   const handleCheckboxChange = (input: keyof typeof selectedInputs) => {
@@ -66,6 +85,17 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
     if (input === 'cashflows' && !selectedInputs.cashflows && flujos.length === 0) {
       agregarFlujo();
     }
+  };
+  
+  const containsXExpression = (str: string | number): boolean => {
+    if (typeof str !== 'string') return false;
+    return str.toLowerCase().includes('x');
+  };
+
+  const hasFlujosConX = (): boolean => {
+    return flujos.some(flujo => {
+      return typeof flujo.monto === 'string' && containsXExpression(flujo.monto);
+    });
   };
   
   const handleCalculate = () => {
@@ -120,6 +150,14 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
     setResultDescription(resultado.descripcion);
     setResultValue(resultado.valor.toString());
   };
+
+  const botonCalcularDisabled =
+    !selectedInputs.interestRate ||
+    !selectedInputs.cashflows ||
+    flujos.length === 0 ||
+    (calculationType === "valorEnN" && !targetPeriod) ||
+    (calculationType === "periodosParaMonto" && !montoObjetivo) ||
+    (calculationType === "incognitaX" && !hasFlujosConX());
 
   return (
     <div className="space-y-8">
@@ -318,10 +356,19 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                       <div>
                         <label className="block text-sm font-medium">Monto</label>
                         <input
-                          type="number"
+                          type={calculationType === "incognitaX" ? "text" : "number"}
                           className="mt-1 block p-2 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                           value={flujo.monto}
-                          onChange={(e) => actualizarFlujo(index, "monto", parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            if (calculationType === "incognitaX") {
+                              // Para modo incógnita, permitir valores de texto
+                              actualizarFlujo(index, "monto", e.target.value);
+                            } else {
+                              // Para otros modos, convertir a número
+                              actualizarFlujo(index, "monto", parseFloat(e.target.value) || 0);
+                            }
+                          }}
+                          placeholder={calculationType === "incognitaX" ? "Ej: x, 2x, x/5" : "0"}
                         />
                       </div>
                       <button
@@ -384,6 +431,53 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                 </div>
               </div>
             )}
+
+            {calculationType === "incognitaX" && (
+              <div className="p-4 border rounded-md bg-gray-50 space-y-3">
+                <p className="text-center text-sm font-medium">
+                  Calcular la incógnita X en flujos de transacciones
+                </p>
+                <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Instrucciones:</strong> Para representar la incógnita X, incluya al menos un flujo 
+                    que contenga "x" en su monto. Puede usar expresiones como:
+                  </p>
+                  <ul className="list-disc pl-5 text-sm text-yellow-800 mt-1">
+                    <li>x (sólo la variable)</li>
+                    <li>2x (un número multiplicando a x)</li>
+                    <li>0.5x (decimal multiplicando a x)</li>
+                    <li>-x (x con signo negativo)</li>
+                    <li>x/5 (x dividida entre un número)</li>
+                  </ul>
+                </div>
+                {!hasFlujosConX() && selectedInputs.cashflows && (
+                  <div className="mt-3">
+                    <p className="text-sm text-red-600 mb-2">
+                      No se ha incluido ningún flujo con la incógnita X.
+                    </p>
+                    <button
+                      onClick={agregarFlujoIncognita}
+                      className="w-full bg-blue-600 text-white py-2 px-4 rounded-md text-sm"
+                    >
+                      Añadir flujo con incógnita X
+                    </button>
+                  </div>
+                )}
+                {!selectedInputs.cashflows && (
+                  <div className="mt-3">
+                    <p className="text-sm text-red-600 mb-2">
+                      Primero active la opción de "Flujos de transacciones" en los datos disponibles.
+                    </p>
+                    <button
+                      onClick={() => handleCheckboxChange('cashflows')}
+                      className="w-full bg-blue-600 text-white py-2 px-4 rounded-md text-sm"
+                    >
+                      Activar flujos de transacciones
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -391,12 +485,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
           <div className="flex justify-center">
             <button
               onClick={handleCalculate}
-              disabled={
-                !calculationType || 
-                (!selectedInputs.interestRate && !selectedInputs.periods && !selectedInputs.cashflows) ||
-                (calculationType === "valorEnN" && !targetPeriod) ||
-                (calculationType === "periodosParaMonto" && !montoObjetivo)
-              }
+              disabled={botonCalcularDisabled}
               className="bg-green-600 text-white py-3 px-10 rounded-md font-medium hover:bg-green-700 disabled:bg-gray-400"
             >
               Calcular
