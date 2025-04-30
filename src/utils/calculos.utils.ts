@@ -51,51 +51,101 @@ const calcular = {
 
 // ! CASO 1: Calcular el valor en un periodo específico
 function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
-    console.log("Función: calcularValorEnN");
-    console.log("Entradas: ", entradas);
+
+    console.warn("fn calcularValorEnN");
+    
+    console.log("entradas: ", entradas);
+    
 
     const { tasaInteres, flujosEfectivo, periodoObjetivo } = entradas;
 
-    // * Validaciones
-    if (!tasaInteres || !flujosEfectivo) {
+    if (tasaInteres === undefined || !flujosEfectivo || periodoObjetivo === undefined) {
         throw new Error('Faltan datos necesarios para el cálculo');
     }
 
-    if (flujosEfectivo.length === 0) {
-        throw new Error('No hay flujos de efectivo para calcular');
+    let sumaEntradas = 0;
+    let sumaSalidas = 0;
+
+    for (const flujo of flujosEfectivo) {
+        const t = Math.abs(flujo.n - periodoObjetivo);
+
+        let factorAjuste = 1;
+
+        if (t !== 0) {
+            factorAjuste = Math.pow(1 + tasaInteres, -t); // si t > 0, descontamos; si t < 0, capitalizamos
+        }
+
+        const valorEquivalente = flujo.monto * factorAjuste;
+
+        if (flujo.tipo === "entrada") {
+            sumaEntradas += valorEquivalente;
+        } else if (flujo.tipo === "salida") {
+            sumaSalidas += valorEquivalente;
+        } else {
+            throw new Error(`Tipo de flujo inválido: ${flujo.tipo}`);
+        }
     }
 
-    if (periodoObjetivo === undefined || periodoObjetivo === null) {
-        throw new Error('Falta especificar el periodo objetivo');
-    }
-
-    // Determinar si hay flujos anteriores al periodo objetivo
-    const existenFlujosAnteriores = flujosEfectivo.some(flujo => flujo.n <= periodoObjetivo);
+    console.log("sumaEntradas: ", sumaEntradas);
+    console.log("sumaSalidas: ", sumaSalidas);
     
-    // * Cálculo del valor total
-    let valorTotal = 0;
-    
-    // Si estamos calculando el valor presente o un periodo anterior a todos los flujos,
-    // o no hay flujos anteriores al periodo objetivo, considerar todos
-    const flujosRelevantes = (periodoObjetivo === 0 || !existenFlujosAnteriores) 
-        ? flujosEfectivo 
-        : flujosEfectivo.filter(flujo => flujo.n <= periodoObjetivo);
-    
-    for (const flujo of flujosRelevantes) {
-        const valor_calculado = calcularValorFlujoEnN(flujo, periodoObjetivo, tasaInteres);
-        console.log("Valor calculado para el flujo: ", flujo, " es: ", valor_calculado);
-        valorTotal += valor_calculado;
-    }
 
-    console.log("Valor total calculado: ", valorTotal);
-
-    const valorRedondeado = Math.round(valorTotal * 100) / 100;
+    const valorTotal = sumaEntradas - sumaSalidas;
 
     return {
-        valor: valorRedondeado,
-        descripcion: `Valor calculado en el periodo ${periodoObjetivo}`
+        valor: Math.abs(Math.round(valorTotal * 100) / 100),
+        descripcion: `Valor equivalente de los flujos en el periodo ${periodoObjetivo}`
     };
 }
+
+
+
+// function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
+//     console.log("Función: calcularValorEnN");
+//     console.log("Entradas: ", entradas);
+
+//     const { tasaInteres, flujosEfectivo, periodoObjetivo } = entradas;
+
+//     // * Validaciones
+//     if (!tasaInteres || !flujosEfectivo) {
+//         throw new Error('Faltan datos necesarios para el cálculo');
+//     }
+
+//     if (flujosEfectivo.length === 0) {
+//         throw new Error('No hay flujos de efectivo para calcular');
+//     }
+
+//     if (periodoObjetivo === undefined || periodoObjetivo === null) {
+//         throw new Error('Falta especificar el periodo objetivo');
+//     }
+
+//     // Determinar si hay flujos anteriores al periodo objetivo
+//     const existenFlujosAnteriores = flujosEfectivo.some(flujo => flujo.n <= periodoObjetivo);
+    
+//     // * Cálculo del valor total
+//     let valorTotal = 0;
+    
+//     // Si estamos calculando el valor presente o un periodo anterior a todos los flujos,
+//     // o no hay flujos anteriores al periodo objetivo, considerar todos
+//     const flujosRelevantes = (periodoObjetivo === 0 || !existenFlujosAnteriores) 
+//         ? flujosEfectivo 
+//         : flujosEfectivo.filter(flujo => flujo.n <= periodoObjetivo);
+    
+//     for (const flujo of flujosRelevantes) {
+//         const valor_calculado = calcularValorFlujoEnN(flujo, periodoObjetivo, tasaInteres);
+//         console.log("Valor calculado para el flujo: ", flujo, " es: ", valor_calculado);
+//         valorTotal += valor_calculado;
+//     }
+
+//     console.log("Valor total calculado: ", valorTotal);
+
+//     const valorRedondeado = Math.round(valorTotal * 100) / 100;
+
+//     return {
+//         valor: valorRedondeado,
+//         descripcion: `Valor calculado en el periodo ${periodoObjetivo}`
+//     };
+// }
 
 // * funcion auxiliar para calcular el valor de un flujo en el periodo objetivo
 // Función auxiliar para calcular el valor de un flujo en el periodo objetivo

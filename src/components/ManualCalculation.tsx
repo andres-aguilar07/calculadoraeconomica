@@ -81,17 +81,21 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
     if (selectedInputs.interestRate && selectedInputs.periods) {
       // Convertir la tasa a tasa periódica vencida según la periodicidad de n
       const fromType = formaPago === "vencida" ? 
-        (periodoPago === periodoCapitalizacion ? "iv" : "Tnv") : 
-        (periodoPago === periodoCapitalizacion ? "ia" : "Tna");
+        (periodoPago === periodoCapitalizacion ? "iev" : "Tnv") : 
+        (periodoPago === periodoCapitalizacion ? "iea" : "Tna");
       
       // Convertir a tasa periódica vencida según periodicidad de n
       tasaInteresCalculos = convertInterestRate({
-        value: parseFloat(interestRate),
-        fromType: fromType,
-        fromPeriod: periodoPago as any,
-        toType: "iv", // Siempre queremos tasa periódica vencida
-        toPeriod: periodicidad as any
+        valor: parseFloat(interestRate),
+        tipoOrigen: fromType as any,
+        periodoPagoOrigen: periodoPago as any,
+        periodoCapitalizacionOrigen: periodoCapitalizacion as any,
+        tipoDestino: "iev" as any, // Siempre queremos tasa periódica vencida
+        periodoPagoDestino: periodicidad as any,
+        periodoCapitalizacionDestino: periodicidad as any // Igualamos PC con PP en destino para tasa periódica
       });
+
+      console.log("tasaInteresCalculos: ", tasaInteresCalculos);
     }
     
     const datosCalculo = {
@@ -110,6 +114,8 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
     };
     
     const resultado = calcular.resolverEcuacionValor(datosCalculo);
+
+    console.log("resultado: ", resultado);
 
     setResultDescription(resultado.descripcion);
     setResultValue(resultado.valor.toString());
