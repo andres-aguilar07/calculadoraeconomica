@@ -168,6 +168,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
           <CashFlowGraph 
             cashflows={flujos} 
             periods={selectedInputs.periods ? parseInt(periods) : undefined}
+            targetPeriod={calculationType === "valorEnN" && targetPeriod ? parseInt(targetPeriod) : undefined}
           />
         </div>
       )}

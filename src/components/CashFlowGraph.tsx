@@ -8,11 +8,23 @@ interface CashFlowGraphProps {
     tipo: "entrada" | "salida";
   }>;
   periods?: number;
+  targetPeriod?: number; // Nuevo prop para el período objetivo
 }
 
-const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => {
-  const maxPeriod = periods || Math.max(...cashflows.map(f => f.n));
-  const minPeriod = Math.min(...cashflows.map(flow => flow.n));
+const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods, targetPeriod }) => {
+  // Primero determinamos el máximo período basado en la jerarquía:
+  // 1. periods (si está definido)
+  // 2. targetPeriod (si está definido)
+  // 3. máximo período de los flujos
+  const maxPeriodFromCashflows = Math.max(...cashflows.map(f => f.n));
+  const maxPeriodFromInputs = periods !== undefined ? periods : 
+                              targetPeriod !== undefined ? targetPeriod : 
+                              maxPeriodFromCashflows;
+  
+  // Si tenemos targetPeriod, siempre queremos mostrar desde 0 hasta el máximo
+  const minPeriod = targetPeriod !== undefined ? 0 : Math.min(...cashflows.map(flow => flow.n));
+  const maxPeriod = Math.max(maxPeriodFromInputs, maxPeriodFromCashflows);
+  
   const totalPeriods = maxPeriod - minPeriod + 1;
 
   // Crear un array con todos los periodos
@@ -102,6 +114,12 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => 
                     : 40) 
                 : 0;
 
+              // Verificar si este período es el objetivo
+              const isTargetPeriod = targetPeriod !== undefined && period === targetPeriod;
+              // Verificar si es período inicial o final para etiquetas especiales
+              const isInitialPeriod = period === 0 && targetPeriod === 0;
+              const isFinalPeriod = period === maxPeriod && targetPeriod === maxPeriod;
+
               return (
                 <div key={period} className="flex flex-col items-center justify-center relative" style={{ flex: 1 }}>
                   {/* Número de periodo */}
@@ -111,6 +129,52 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => 
 
                   {/* Marca vertical en la línea de tiempo */}
                   <div className="absolute h-3 w-0.5 bg-gray-300 top-1/2 transform -translate-y-1/2" />
+
+                  {/* Flecha para período objetivo */}
+                  {isTargetPeriod && (
+                    <div 
+                      className="absolute top-[calc(50%-5px)] transform -translate-y-full flex flex-col items-center"
+                      style={{ 
+                        height: `40%`,
+                        minHeight: '30px',
+                        maxHeight: '80%',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      <div className="flex-shrink-0 relative">
+                        <BsArrowUpCircleFill 
+                          className="text-black" 
+                          size={28} 
+                        />
+                        {/* Mostrar P o F si es período inicial o final */}
+                        {isInitialPeriod && (
+                          <div className="absolute w-full h-full flex items-center justify-center top-0 left-0">
+                            <span className="text-white font-bold text-sm">P</span>
+                          </div>
+                        )}
+                        {isFinalPeriod && (
+                          <div className="absolute w-full h-full flex items-center justify-center top-0 left-0">
+                            <span className="text-white font-bold text-sm">F</span>
+                          </div>
+                        )}
+                      </div>
+                      {/* Mostrar la flecha solo si no es P ni F */}
+                      {!isInitialPeriod && !isFinalPeriod && (
+                        <>
+                          <div className="h-full w-0.5 bg-black -mt-1" />
+                          <span className="text-sm font-medium text-black mt-1 whitespace-nowrap">
+                            Valor en n={period}
+                          </span>
+                        </>
+                      )}
+                      {/* Texto para P y F sin mostrar flecha */}
+                      {(isInitialPeriod || isFinalPeriod) && (
+                        <span className="text-sm font-medium text-black mt-1 whitespace-nowrap">
+                          {isInitialPeriod ? 'Valor Presente (P)' : 'Valor Futuro (F)'}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Flecha de entrada si hay flujo de entrada */}
                   {entrada && (
