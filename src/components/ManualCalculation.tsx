@@ -34,6 +34,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   // Additional inputs for specific calculations
   const [targetPeriod, setTargetPeriod] = useState<string>("");
   const [montoObjetivo, setMontoObjetivo] = useState<string>("");
+  const [puntoFocal, setPuntoFocal] = useState<string>("0");
 
   // Result state
   const [resultDescription, setResultDescription] = useState<string>("");
@@ -139,7 +140,8 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
           tipo: f.tipo
         })) : undefined,
         periodoObjetivo: calculationType === "valorEnN" ? parseInt(targetPeriod) : undefined,
-        montoObjetivo: calculationType === "periodosParaMonto" ? parseFloat(montoObjetivo) : undefined
+        montoObjetivo: calculationType === "periodosParaMonto" ? parseFloat(montoObjetivo) : undefined,
+        puntoFocal: calculationType === "incognitaX" ? parseInt(puntoFocal) : undefined
       }
     };
     
@@ -169,6 +171,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
             cashflows={flujos} 
             periods={selectedInputs.periods ? parseInt(periods) : undefined}
             targetPeriod={calculationType === "valorEnN" && targetPeriod ? parseInt(targetPeriod) : undefined}
+            focalPoint={calculationType === "incognitaX" && puntoFocal ? parseInt(puntoFocal) : undefined}
           />
         </div>
       )}
@@ -438,6 +441,17 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                 <p className="text-center text-sm font-medium">
                   Calcular la incógnita X en flujos de transacciones
                 </p>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Punto Focal (n)</label>
+                  <input
+                    type="number"
+                    value={puntoFocal}
+                    onChange={(e) => setPuntoFocal(e.target.value)}
+                    className="w-full p-2 border rounded-md"
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Período de referencia para calcular el valor de X</p>
+                </div>
                 <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                   <p className="text-sm text-yellow-800">
                     <strong>Instrucciones:</strong> Para representar la incógnita X, incluya al menos un flujo 

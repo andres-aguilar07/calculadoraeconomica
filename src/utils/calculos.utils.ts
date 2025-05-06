@@ -12,6 +12,7 @@ interface EntradasCalculo {
     periodoObjetivo?: number;         // Periodo objetivo para el cálculo
     periodos?: number;                // Número de periodos
     montoObjetivo?: number;           // Monto objetivo a alcanzar
+    puntoFocal?: number;              // Punto focal para calcular incógnita X
 }
 
 // Estructura completa de datos para cálculo
@@ -340,7 +341,7 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
     console.log("Función: calcularIncognitaX");
     console.log("Entradas: ", entradas);
 
-    const { tasaInteres, flujosEfectivo } = entradas;
+    const { tasaInteres, flujosEfectivo, puntoFocal } = entradas;
 
     // * Validaciones
     if (!tasaInteres || !flujosEfectivo) {
@@ -419,11 +420,12 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
     let coeficientesX = 0;
     let terminosIndependientes = 0;
 
+    // Determinar el periodo de referencia (punto focal)
+    // Si se proporciona un punto focal, usarlo; de lo contrario, usar el periodo del primer flujo con X
+    const periodoReferencia = puntoFocal !== undefined ? puntoFocal : flujosConX[0].flujo.n;
+    
     // Calcular los coeficientes de X
     for (const { flujo, coeficiente } of flujosConX) {
-        // El periodo de referencia será el del primer flujo con X
-        const periodoReferencia = flujosConX[0].flujo.n;
-        
         let coeficienteAjustado = coeficiente;
         
         // Ajustar el coeficiente según la posición temporal respecto al período de referencia
@@ -446,8 +448,6 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
 
     // Calcular los términos independientes (flujos numéricos)
     for (const flujo of flujosNumericos) {
-        // Usar el mismo período de referencia que para X
-        const periodoReferencia = flujosConX[0].flujo.n;
         const valorEnPeriodoReferencia = calcularValorFlujoEnN(flujo, periodoReferencia, tasaInteres);
         
         // Los sumamos pero con signo negativo porque pasarán al otro lado de la ecuación
@@ -467,7 +467,6 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
     const valorRedondeado = Math.round(valorX * 100) / 100;
     
     // Preparar una descripción detallada de la resolución
-    const periodoReferencia = flujosConX[0].flujo.n;
     const ecuacion = `${coeficientesX.toFixed(2)}X = ${terminosIndependientes.toFixed(2)}`;
     const calculo = `X = ${terminosIndependientes.toFixed(2)} / ${coeficientesX.toFixed(2)}`;
     

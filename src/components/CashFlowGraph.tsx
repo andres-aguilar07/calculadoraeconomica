@@ -8,21 +8,24 @@ interface CashFlowGraphProps {
     tipo: "entrada" | "salida";
   }>;
   periods?: number;
-  targetPeriod?: number; // Nuevo prop para el período objetivo
+  targetPeriod?: number; // Período objetivo para valorEnN
+  focalPoint?: number; // Punto focal para incognitaX
 }
 
-const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods, targetPeriod }) => {
+const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods, targetPeriod, focalPoint }) => {
   // Primero determinamos el máximo período basado en la jerarquía:
   // 1. periods (si está definido)
   // 2. targetPeriod (si está definido)
-  // 3. máximo período de los flujos
+  // 3. focalPoint (si está definido)
+  // 4. máximo período de los flujos
   const maxPeriodFromCashflows = Math.max(...cashflows.map(f => f.n));
   const maxPeriodFromInputs = periods !== undefined ? periods : 
                               targetPeriod !== undefined ? targetPeriod : 
+                              focalPoint !== undefined ? focalPoint :
                               maxPeriodFromCashflows;
   
-  // Si tenemos targetPeriod, siempre queremos mostrar desde 0 hasta el máximo
-  const minPeriod = targetPeriod !== undefined ? 0 : Math.min(...cashflows.map(flow => flow.n));
+  // Si tenemos targetPeriod o focalPoint, siempre queremos mostrar desde 0 hasta el máximo
+  const minPeriod = (targetPeriod !== undefined || focalPoint !== undefined) ? 0 : Math.min(...cashflows.map(flow => flow.n));
   const maxPeriod = Math.max(maxPeriodFromInputs, maxPeriodFromCashflows);
   
   const totalPeriods = maxPeriod - minPeriod + 1;
@@ -116,6 +119,8 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods, targe
 
               // Verificar si este período es el objetivo
               const isTargetPeriod = targetPeriod !== undefined && period === targetPeriod;
+              // Verificar si este período es el punto focal
+              const isFocalPoint = focalPoint !== undefined && period === focalPoint;
               // Verificar si es período inicial o final para etiquetas especiales
               const isInitialPeriod = period === 0 && targetPeriod === 0;
               const isFinalPeriod = period === maxPeriod && targetPeriod === maxPeriod;
@@ -123,12 +128,12 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods, targe
               return (
                 <div key={period} className="flex flex-col items-center justify-center relative" style={{ flex: 1 }}>
                   {/* Número de periodo */}
-                  <div className="absolute bottom-0 text-sm font-medium" style={{ bottom: '-2rem' }}>
+                  <div className={`absolute bottom-0 text-sm font-medium ${isFocalPoint ? 'text-blue-600 font-bold' : ''}`} style={{ bottom: '-2rem' }}>
                     {period}
                   </div>
 
                   {/* Marca vertical en la línea de tiempo */}
-                  <div className="absolute h-3 w-0.5 bg-gray-300 top-1/2 transform -translate-y-1/2" />
+                  <div className={`absolute h-3 w-0.5 ${isFocalPoint ? 'bg-blue-500' : 'bg-gray-300'} top-1/2 transform -translate-y-1/2`} />
 
                   {/* Flecha para período objetivo */}
                   {isTargetPeriod && (
@@ -173,6 +178,30 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods, targe
                           {isInitialPeriod ? 'Valor Presente (P)' : 'Valor Futuro (F)'}
                         </span>
                       )}
+                    </div>
+                  )}
+
+                  {/* Indicador para punto focal */}
+                  {isFocalPoint && !isTargetPeriod && (
+                    <div 
+                      className="absolute top-[calc(50%-5px)] transform -translate-y-full flex flex-col items-center"
+                      style={{ 
+                        height: `40%`,
+                        minHeight: '30px',
+                        maxHeight: '80%',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      <div className="flex-shrink-0 relative">
+                        <BsArrowUpCircleFill 
+                          className="text-blue-500" 
+                          size={28} 
+                        />
+                      </div>
+                      <div className="h-full w-0.5 bg-blue-500 -mt-1" />
+                      <span className="text-sm font-medium text-blue-600 mt-1 whitespace-nowrap">
+                        Punto Focal (X)
+                      </span>
                     </div>
                   )}
 
