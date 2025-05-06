@@ -123,7 +123,12 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => 
                         transition: 'all 0.3s ease'
                       }}
                     >
-                      <BsArrowUpCircleFill className={`${typeof entrada.monto === 'string' ? 'text-purple-500' : 'text-green-500'} text-2xl`} />
+                      <div className="flex-shrink-0">
+                        <BsArrowUpCircleFill 
+                          className={`${typeof entrada.monto === 'string' ? 'text-purple-500' : 'text-green-500'}`} 
+                          size={28} // Tamaño fijo para el icono
+                        />
+                      </div>
                       <div className={`h-full w-0.5 ${typeof entrada.monto === 'string' ? 'bg-purple-500' : 'bg-green-500'} -mt-1`} />
                       <span className={`text-sm font-medium ${typeof entrada.monto === 'string' ? 'text-purple-600' : 'text-green-600'} mt-1 whitespace-nowrap`}>
                         +{typeof entrada.monto === 'number' ? '$' : ''}{formatMonto(entrada.monto)}
@@ -146,7 +151,12 @@ const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods }) => 
                         -{typeof salida.monto === 'number' ? '$' : ''}{formatMonto(salida.monto)}
                       </span>
                       <div className={`h-full w-0.5 ${typeof salida.monto === 'string' ? 'bg-purple-500' : 'bg-red-500'} -mb-1`} />
-                      <BsArrowDownCircleFill className={`${typeof salida.monto === 'string' ? 'text-purple-500' : 'text-red-500'} text-2xl`} />
+                      <div className="flex-shrink-0">
+                        <BsArrowDownCircleFill 
+                          className={`${typeof salida.monto === 'string' ? 'text-purple-500' : 'text-red-500'}`} 
+                          size={28} // Tamaño fijo para el icono
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
