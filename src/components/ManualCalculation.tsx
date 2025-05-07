@@ -190,8 +190,9 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                 checked={selectedInputs.interestRate}
                 onChange={() => handleCheckboxChange('interestRate')}
                 className="h-5 w-5"
+                disabled={calculationType === 'tasaInteres'}
               />
-              <label htmlFor="interestRateCheck" className="text-md">
+              <label htmlFor="interestRateCheck" className={`text-md ${calculationType === 'tasaInteres' ? 'text-gray-400' : ''}`}>
                 i (tasa de interés)
               </label>
 
