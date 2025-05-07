@@ -276,8 +276,8 @@ function calcularPeriodosParaMonto(entradas: EntradasCalculo): ResultadoCalculo 
     const MAX_PERIODOS = ultimoPeriodo + 1000;
     
     // Búsqueda binaria para encontrar el periodo exacto (posiblemente decimal)
-    let periodoInferior = ultimoPeriodo;
-    let periodoSuperior = MAX_PERIODOS;
+    // let periodoInferior = ultimoPeriodo;
+    // let periodoSuperior = MAX_PERIODOS;
     
     // Verificar si el valor en el último periodo ya alcanza o supera el monto objetivo
     const valorUltimoPeriodo = calcularValorEnPeriodo(ultimoPeriodo);
