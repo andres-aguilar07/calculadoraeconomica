@@ -59,6 +59,16 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
     }
   }, [calculationType]);
 
+  // Effect to automatically select interest rate for series uniformes
+  useEffect(() => {
+    if (calculationType === 'seriesUniformes' && !selectedInputs.interestRate) {
+      setSelectedInputs(prev => ({
+        ...prev,
+        interestRate: true
+      }));
+    }
+  }, [calculationType, selectedInputs.interestRate]);
+
   const agregarFlujo = () => {
     // Add new cash flow without sorting
     setFlujos([...flujos, { n: 0, monto: 0, tipo: "entrada" as "entrada" | "salida" }]);
@@ -121,6 +131,106 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
     return flujos.some(flujo => {
       return typeof flujo.monto === 'string' && containsXExpression(flujo.monto);
     });
+  };
+  
+  // Generar flujos virtuales para representar la serie uniforme
+  const generarFlujosSerieUniforme = (): Array<{ n: number; monto: number | string; tipo: "entrada" | "salida" }> => {
+    if (calculationType !== 'seriesUniformes') return [];
+    
+    const periodoInicialNum = parseInt(periodoInicial) || 1;
+    const periodoFinalNum = parseInt(periodoFinal) || 5;
+    const flujosGenerados: Array<{ n: number; monto: number | string; tipo: "entrada" | "salida" }> = [];
+    
+    // Agregar el valor P si está definido y estamos calculando A o F
+    if (calcularEnSeries !== 'P' && valorP) {
+      const pValorNum = parseFloat(valorP);
+      if (!isNaN(pValorNum)) {
+        flujosGenerados.push({
+          // Para anualidad vencida, P está un periodo antes del inicio
+          // Para anualidad anticipada, P está en el primer periodo
+          n: tipoAnualidad === 'vencida' ? periodoInicialNum - 1 : periodoInicialNum,
+          monto: pValorNum,
+          tipo: "entrada"
+        });
+      }
+    }
+    
+    // Agregar flujos de la anualidad
+    if (calcularEnSeries !== 'A' && valorA) {
+      const aValorNum = parseFloat(valorA);
+      if (!isNaN(aValorNum)) {
+        for (let i = periodoInicialNum; i <= periodoFinalNum; i++) {
+          flujosGenerados.push({
+            n: i,
+            monto: aValorNum,
+            // Si estamos calculando P o F, los flujos A son salidas de dinero
+            // Si ya tenemos A y estamos mostrando la gráfica, son entradas
+            tipo: (calcularEnSeries === 'P' || calcularEnSeries === 'F') ? "salida" : "entrada"
+          });
+        }
+      }
+    }
+    
+    // Agregar el valor F si está definido y estamos calculando A o P
+    if (calcularEnSeries !== 'F' && valorF) {
+      const fValorNum = parseFloat(valorF);
+      if (!isNaN(fValorNum)) {
+        flujosGenerados.push({
+          n: periodoFinalNum,
+          monto: fValorNum,
+          tipo: "entrada"
+        });
+      }
+    }
+    
+    // Si estamos calculando A, añadir un signo de interrogación para representar el valor buscado
+    if (calcularEnSeries === 'A' && (valorP || valorF)) {
+      for (let i = periodoInicialNum; i <= periodoFinalNum; i++) {
+        flujosGenerados.push({
+          n: i,
+          monto: "A = ?",
+          tipo: "salida"
+        });
+      }
+    }
+    
+    // Si estamos calculando P, añadir un signo de interrogación para representar el valor buscado
+    if (calcularEnSeries === 'P' && valorA) {
+      flujosGenerados.push({
+        n: tipoAnualidad === 'vencida' ? periodoInicialNum - 1 : periodoInicialNum,
+        monto: "P = ?",
+        tipo: "entrada"
+      });
+    }
+    
+    // Si estamos calculando F, añadir un signo de interrogación para representar el valor buscado
+    if (calcularEnSeries === 'F' && valorA) {
+      flujosGenerados.push({
+        n: periodoFinalNum,
+        monto: "F = ?",
+        tipo: "entrada"
+      });
+    }
+    
+    return flujosGenerados;
+  };
+  
+  // Determinar cuando se debe mostrar la gráfica de serie uniforme
+  const mostrarGraficaSerieUniforme = (): boolean => {
+    if (calculationType !== 'seriesUniformes') return false;
+    
+    // Mostrar la gráfica si tenemos los datos mínimos necesarios
+    if (calcularEnSeries === 'A' && (valorP || valorF)) return true;
+    if (calcularEnSeries === 'P' && valorA) return true;
+    if (calcularEnSeries === 'F' && valorA) return true;
+    
+    // Si ya tenemos todos los valores (después de calcular), también mostrar la gráfica
+    if (valorA && ((calcularEnSeries === 'P' && valorP) || (calcularEnSeries === 'F' && valorF))) return true;
+    
+    // Si hay un resultado, también mostramos la gráfica
+    if (resultValue) return true;
+    
+    return false;
   };
   
   const handleCalculate = () => {
@@ -206,7 +316,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   return (
     <div className="space-y-8">
       {/* Gráfica de flujos */}
-      {selectedInputs.cashflows && flujos.length > 0 && (
+      {(selectedInputs.cashflows && flujos.length > 0 && calculationType !== "seriesUniformes") && (
         <div className="border rounded-lg p-4 bg-white shadow-sm">
           <h3 className="text-lg font-medium text-center mb-4">Gráfica de flujos</h3>
           <CashFlowGraph 
@@ -214,6 +324,19 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
             periods={selectedInputs.periods ? parseInt(periods) : undefined}
             targetPeriod={calculationType === "valorEnN" && targetPeriod ? parseInt(targetPeriod) : undefined}
             focalPoint={calculationType === "incognitaX" && puntoFocal ? parseInt(puntoFocal) : undefined}
+          />
+        </div>
+      )}
+      
+      {/* Gráfica para series uniformes */}
+      {calculationType === "seriesUniformes" && mostrarGraficaSerieUniforme() && (
+        <div className="border rounded-lg p-4 bg-white shadow-sm">
+          <h3 className="text-lg font-medium text-center mb-4">Gráfica de serie uniforme</h3>
+          <CashFlowGraph 
+            cashflows={generarFlujosSerieUniforme()} 
+            periods={undefined}
+            targetPeriod={undefined}
+            focalPoint={undefined}
           />
         </div>
       )}
