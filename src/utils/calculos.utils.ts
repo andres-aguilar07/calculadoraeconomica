@@ -542,16 +542,18 @@ function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
     if (calcularEnSeries === 'A') {
         // Calculamos el valor de la anualidad (A)
         
+        // Verificar la situación: ¿qué valores tenemos?
+        const tieneFValido = valorF !== undefined && valorF !== null && !isNaN(Number(valorF));
+        const tienePValido = valorP !== undefined && valorP !== null && !isNaN(Number(valorP));
+        
+        console.log("¿Tiene F válido?:", tieneFValido, "F=", valorF);
+        console.log("¿Tiene P válido?:", tienePValido, "P=", valorP);
+        
         // Primero verificamos si tenemos un valor F válido para calcular
-        if (valorF !== undefined && valorF !== null) {
+        if (tieneFValido) {
             const valorFNumerico = Number(valorF);
             
             console.log("Calculando A a partir de F:", valorFNumerico);
-            
-            if (isNaN(valorFNumerico)) {
-                console.error("El valor F no es un número válido:", valorF);
-                throw new Error(`El valor futuro (F) proporcionado no es un número válido: ${valorF}`);
-            }
             
             if (tipoAnualidad === 'vencida') {
                 // A = F * (i / ((1+i)^n - 1))
@@ -607,14 +609,10 @@ function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
             }
         } 
         // Luego verificamos si tenemos un valor P válido para calcular
-        else if (valorP !== undefined && valorP !== null) {
+        else if (tienePValido) {
             const valorPNumerico = Number(valorP);
             
             console.log("Calculando A a partir de P:", valorPNumerico);
-            
-            if (isNaN(valorPNumerico)) {
-                throw new Error(`El valor presente (P) proporcionado no es un número válido: ${valorP}`);
-            }
             
             if (tipoAnualidad === 'vencida') {
                 // A = P * ((i(1+i)^n) / ((1+i)^n - 1))
@@ -648,19 +646,15 @@ function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
         }
         // Si no hay ni P ni F válidos, lanzar error
         else {
-            throw new Error('Para calcular A se necesita proporcionar el valor de P o F');
+            throw new Error('Para calcular A se necesita proporcionar un valor válido de P o F');
         }
     } else if (calcularEnSeries === 'P') {
         // Calculamos el valor presente (P)
-        if (valorA !== undefined && valorA !== null) {
+        if (valorA !== undefined && valorA !== null && !isNaN(Number(valorA))) {
             // Calcular P a partir de A
             const valorANumerico = Number(valorA);
             
             console.log("Calculando P a partir de A:", valorANumerico);
-            
-            if (isNaN(valorANumerico)) {
-                throw new Error(`El valor de la anualidad (A) proporcionado no es un número válido: ${valorA}`);
-            }
             
             if (tipoAnualidad === 'vencida') {
                 // P = A * (((1+i)^n - 1) / (i(1+i)^n))
@@ -680,19 +674,15 @@ function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
                 };
             }
         } else {
-            throw new Error('Para calcular P se necesita proporcionar el valor de A');
+            throw new Error('Para calcular P se necesita proporcionar un valor válido de A');
         }
     } else if (calcularEnSeries === 'F') {
         // Calculamos el valor futuro (F)
-        if (valorA !== undefined && valorA !== null) {
+        if (valorA !== undefined && valorA !== null && !isNaN(Number(valorA))) {
             // Calcular F a partir de A
             const valorANumerico = Number(valorA);
             
             console.log("Calculando F a partir de A:", valorANumerico);
-            
-            if (isNaN(valorANumerico)) {
-                throw new Error(`El valor de la anualidad (A) proporcionado no es un número válido: ${valorA}`);
-            }
             
             if (tipoAnualidad === 'vencida') {
                 // F = A * (((1+i)^n - 1) / i)
@@ -712,7 +702,7 @@ function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
                 };
             }
         } else {
-            throw new Error('Para calcular F se necesita proporcionar el valor de A');
+            throw new Error('Para calcular F se necesita proporcionar un valor válido de A');
         }
     } else {
         throw new Error('Tipo de cálculo no válido para series uniformes');
