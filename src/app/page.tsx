@@ -3,7 +3,7 @@ import CalculationSelector from '@/components/CalculationSelector';
 import ManualCalculation from '@/components/ManualCalculation';
 import AICalculation from '@/components/AICalculation';
 
-type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
+type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX' | 'seriesUniformes';
 
 export default function HomePage() {
   const [calculationType, setCalculationType] = React.useState<CalculationType>('valorEnN');

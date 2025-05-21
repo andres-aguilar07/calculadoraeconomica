@@ -1,5 +1,5 @@
 // Tipos de cálculo
-type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
+export type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX' | 'seriesUniformes';
 
 // Datos de entrada para el cálculo
 interface EntradasCalculo {
@@ -13,6 +13,14 @@ interface EntradasCalculo {
     periodos?: number;                // Número de periodos
     montoObjetivo?: number;           // Monto objetivo a alcanzar
     puntoFocal?: number;              // Punto focal para calcular incógnita X
+    // Nuevos campos para series uniformes
+    tipoAnualidad?: "vencida" | "anticipada";  // Tipo de anualidad para series uniformes
+    periodoInicial?: number;          // Periodo inicial de la serie
+    periodoFinal?: number;            // Periodo final de la serie
+    valorA?: number;                  // Valor A (monto constante) para series uniformes
+    valorP?: number;                  // Valor P (valor presente) para series uniformes
+    valorF?: number;                  // Valor F (valor futuro) para series uniformes
+    calcularEnSeries?: "A" | "P" | "F"; // Qué valor calcular en series uniformes
 }
 
 // Estructura completa de datos para cálculo
@@ -46,6 +54,8 @@ const calcular = {
                 return calcularPeriodosParaMonto(datos.entradas);
             case 'incognitaX':
                 return calcularIncognitaX(datos.entradas);
+            case 'seriesUniformes':
+                return calcularSeriesUniformes(datos.entradas);
             default:
                 throw new Error('Tipo de cálculo no válido');
         }
@@ -474,6 +484,135 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
         valor: valorRedondeado,
         descripcion: `Valor de X en el periodo ${periodoReferencia}: ${ecuacion}, por lo tanto ${calculo} = ${valorRedondeado}`
     };
+}
+
+// ! CASO 5: Calcular series uniformes
+function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
+    console.log("Función: calcularSeriesUniformes");
+    console.log("Entradas: ", entradas);
+    
+    const { 
+        tasaInteres, 
+        tipoAnualidad, 
+        periodoInicial, 
+        periodoFinal, 
+        valorA, 
+        valorP, 
+        valorF, 
+        calcularEnSeries 
+    } = entradas;
+
+    // * Validaciones
+    if (!tasaInteres) {
+        throw new Error('Falta la tasa de interés para el cálculo');
+    }
+
+    if (!tipoAnualidad) {
+        throw new Error('Falta especificar el tipo de anualidad (vencida o anticipada)');
+    }
+
+    if (periodoInicial === undefined || periodoFinal === undefined) {
+        throw new Error('Falta especificar el periodo inicial y/o final de la serie uniforme');
+    }
+
+    if (calcularEnSeries === undefined) {
+        throw new Error('Falta especificar qué valor calcular (A, P o F)');
+    }
+
+    // Calcular el número de periodos
+    const n = periodoFinal - periodoInicial + 1;
+    
+    if (n <= 0) {
+        throw new Error('El periodo final debe ser mayor o igual que el periodo inicial');
+    }
+
+    // Realizar el cálculo según lo que se quiere obtener
+    if (calcularEnSeries === 'A') {
+        // Calculamos el valor de la anualidad (A)
+        if (valorP !== undefined) {
+            // Calcular A a partir de P
+            if (tipoAnualidad === 'vencida') {
+                // A = P * ((i(1+i)^n) / ((1+i)^n - 1))
+                const resultado = valorP * ((tasaInteres * Math.pow(1 + tasaInteres, n)) / (Math.pow(1 + tasaInteres, n) - 1));
+                return {
+                    valor: Math.round(resultado * 100) / 100,
+                    descripcion: `Valor de la anualidad (A) con anualidad vencida: ${Math.round(resultado * 100) / 100}`
+                };
+            } else {
+                // A = P * ((i(1+i)^(n-1)) / ((1+i)^n - 1))
+                const resultado = valorP * ((tasaInteres * Math.pow(1 + tasaInteres, n - 1)) / (Math.pow(1 + tasaInteres, n) - 1));
+                return {
+                    valor: Math.round(resultado * 100) / 100,
+                    descripcion: `Valor de la anualidad (A) con anualidad anticipada: ${Math.round(resultado * 100) / 100}`
+                };
+            }
+        } else if (valorF !== undefined) {
+            // Calcular A a partir de F
+            if (tipoAnualidad === 'vencida') {
+                // A = F * (i / ((1+i)^n - 1))
+                const resultado = valorF * (tasaInteres / (Math.pow(1 + tasaInteres, n) - 1));
+                return {
+                    valor: Math.round(resultado * 100) / 100,
+                    descripcion: `Valor de la anualidad (A) con anualidad vencida: ${Math.round(resultado * 100) / 100}`
+                };
+            } else {
+                // A = F * (i / ((1+i)^n - 1)) * (1 / (1+i))
+                const resultado = valorF * (tasaInteres / (Math.pow(1 + tasaInteres, n) - 1)) * (1 / (1 + tasaInteres));
+                return {
+                    valor: Math.round(resultado * 100) / 100,
+                    descripcion: `Valor de la anualidad (A) con anualidad anticipada: ${Math.round(resultado * 100) / 100}`
+                };
+            }
+        } else {
+            throw new Error('Para calcular A se necesita proporcionar el valor de P o F');
+        }
+    } else if (calcularEnSeries === 'P') {
+        // Calculamos el valor presente (P)
+        if (valorA !== undefined) {
+            // Calcular P a partir de A
+            if (tipoAnualidad === 'vencida') {
+                // P = A * (((1+i)^n - 1) / (i(1+i)^n))
+                const resultado = valorA * ((Math.pow(1 + tasaInteres, n) - 1) / (tasaInteres * Math.pow(1 + tasaInteres, n)));
+                return {
+                    valor: Math.round(resultado * 100) / 100,
+                    descripcion: `Valor presente (P) con anualidad vencida: ${Math.round(resultado * 100) / 100}`
+                };
+            } else {
+                // P = A * (((1+i)^n - 1) / (i(1+i)^(n-1)))
+                const resultado = valorA * ((Math.pow(1 + tasaInteres, n) - 1) / (tasaInteres * Math.pow(1 + tasaInteres, n - 1)));
+                return {
+                    valor: Math.round(resultado * 100) / 100,
+                    descripcion: `Valor presente (P) con anualidad anticipada: ${Math.round(resultado * 100) / 100}`
+                };
+            }
+        } else {
+            throw new Error('Para calcular P se necesita proporcionar el valor de A');
+        }
+    } else if (calcularEnSeries === 'F') {
+        // Calculamos el valor futuro (F)
+        if (valorA !== undefined) {
+            // Calcular F a partir de A
+            if (tipoAnualidad === 'vencida') {
+                // F = A * (((1+i)^n - 1) / i)
+                const resultado = valorA * ((Math.pow(1 + tasaInteres, n) - 1) / tasaInteres);
+                return {
+                    valor: Math.round(resultado * 100) / 100,
+                    descripcion: `Valor futuro (F) con anualidad vencida: ${Math.round(resultado * 100) / 100}`
+                };
+            } else {
+                // F = A * (((1+i)^n - 1) / i) * (1+i)
+                const resultado = valorA * ((Math.pow(1 + tasaInteres, n) - 1) / tasaInteres) * (1 + tasaInteres);
+                return {
+                    valor: Math.round(resultado * 100) / 100,
+                    descripcion: `Valor futuro (F) con anualidad anticipada: ${Math.round(resultado * 100) / 100}`
+                };
+            }
+        } else {
+            throw new Error('Para calcular F se necesita proporcionar el valor de A');
+        }
+    } else {
+        throw new Error('Tipo de cálculo no válido para series uniformes');
+    }
 }
 
 export default calcular;

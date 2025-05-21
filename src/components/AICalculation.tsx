@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import calcular from "@/utils/calculos.utils";
+import { ObjetivoCalculo } from "@/utils/calculos.utils";
 import CashFlowGraph from './CashFlowGraph';
 import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
 
@@ -26,7 +27,7 @@ const getRetryDelay = (attempt: number): number => {
   return baseDelay + jitter;
 };
 
-type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
+type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX' | 'seriesUniformes';
 
 interface CashFlow {
   n: number;
@@ -217,13 +218,18 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
 
       // Realizar el cálculo con los datos extraídos
       const calculationData = {
-        objetivo: calculationType,
+        objetivo: calculationType as ObjetivoCalculo,
         entradas: {
           tasaInteres: extractedData.interestRate,
           periodos: extractedData.periods,
           flujosEfectivo: extractedData.cashflows,
           periodoObjetivo: calculationType === "valorEnN" ? 12 : undefined,
-          montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined
+          montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined,
+          tipoAnualidad: calculationType === "seriesUniformes" ? ("vencida" as "vencida" | "anticipada") : undefined,
+          periodoInicial: calculationType === "seriesUniformes" ? 1 : undefined,
+          periodoFinal: calculationType === "seriesUniformes" ? 10 : undefined,
+          valorA: calculationType === "seriesUniformes" ? 1000 : undefined,
+          calcularEnSeries: calculationType === "seriesUniformes" ? ("P" as "A" | "P" | "F") : undefined
         }
       };
 
@@ -246,13 +252,18 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
             
             // Realizar el cálculo con los datos extraídos
             const calculationData = {
-              objetivo: calculationType,
+              objetivo: calculationType as ObjetivoCalculo,
               entradas: {
                 tasaInteres: fallbackData.interestRate,
                 periodos: fallbackData.periods,
                 flujosEfectivo: fallbackData.cashflows,
                 periodoObjetivo: calculationType === "valorEnN" ? 12 : undefined,
-                montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined
+                montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined,
+                tipoAnualidad: calculationType === "seriesUniformes" ? ("vencida" as "vencida" | "anticipada") : undefined,
+                periodoInicial: calculationType === "seriesUniformes" ? 1 : undefined,
+                periodoFinal: calculationType === "seriesUniformes" ? 10 : undefined,
+                valorA: calculationType === "seriesUniformes" ? 1000 : undefined,
+                calcularEnSeries: calculationType === "seriesUniformes" ? ("P" as "A" | "P" | "F") : undefined
               }
             };
 
@@ -527,13 +538,18 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
               onClick={() => {
                 // Recalcular con los datos actualizados
                 const calculationData = {
-                  objetivo: calculationType,
+                  objetivo: calculationType as ObjetivoCalculo,
                   entradas: {
                     tasaInteres: extractedData.interestRate,
                     periodos: extractedData.periods,
                     flujosEfectivo: extractedData.cashflows,
                     periodoObjetivo: calculationType === "valorEnN" ? 12 : undefined,
-                    montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined
+                    montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined,
+                    tipoAnualidad: calculationType === "seriesUniformes" ? ("vencida" as "vencida" | "anticipada") : undefined,
+                    periodoInicial: calculationType === "seriesUniformes" ? 1 : undefined,
+                    periodoFinal: calculationType === "seriesUniformes" ? 10 : undefined,
+                    valorA: calculationType === "seriesUniformes" ? 1000 : undefined,
+                    calcularEnSeries: calculationType === "seriesUniformes" ? ("P" as "A" | "P" | "F") : undefined
                   }
                 };
                 

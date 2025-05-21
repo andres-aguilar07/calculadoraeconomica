@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import calcular from "@/utils/calculos.utils";
+import { ObjetivoCalculo } from "@/utils/calculos.utils";
 import CashFlowGraph from './CashFlowGraph';
 import convertInterestRate from '@/utils/conversor-tasa.utils';
-
-type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
 
 interface ManualCalculationProps {
   calculationType: ObjetivoCalculo;
@@ -35,6 +34,15 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   const [targetPeriod, setTargetPeriod] = useState<string>("");
   const [montoObjetivo, setMontoObjetivo] = useState<string>("");
   const [puntoFocal, setPuntoFocal] = useState<string>("0");
+
+  // * SERIES UNIFORMES
+  const [tipoAnualidad, setTipoAnualidad] = useState<"vencida" | "anticipada">("vencida");
+  const [periodoInicial, setPeriodoInicial] = useState<string>("1");
+  const [periodoFinal, setPeriodoFinal] = useState<string>("5");
+  const [calcularEnSeries, setCalcularEnSeries] = useState<"A" | "P" | "F">("A");
+  const [valorA, setValorA] = useState<string>("");
+  const [valorP, setValorP] = useState<string>("");
+  const [valorF, setValorF] = useState<string>("");
 
   // Result state
   const [resultDescription, setResultDescription] = useState<string>("");
@@ -141,7 +149,15 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
         })) : undefined,
         periodoObjetivo: calculationType === "valorEnN" ? parseInt(targetPeriod) : undefined,
         montoObjetivo: calculationType === "periodosParaMonto" ? parseFloat(montoObjetivo) : undefined,
-        puntoFocal: calculationType === "incognitaX" ? parseInt(puntoFocal) : undefined
+        puntoFocal: calculationType === "incognitaX" ? parseInt(puntoFocal) : undefined,
+        // Datos para series uniformes
+        tipoAnualidad: calculationType === "seriesUniformes" ? tipoAnualidad : undefined,
+        periodoInicial: calculationType === "seriesUniformes" ? parseInt(periodoInicial) : undefined,
+        periodoFinal: calculationType === "seriesUniformes" ? parseInt(periodoFinal) : undefined,
+        valorA: calculationType === "seriesUniformes" && calcularEnSeries !== "A" ? parseFloat(valorA) : undefined,
+        valorP: calculationType === "seriesUniformes" && calcularEnSeries !== "P" ? parseFloat(valorP) : undefined,
+        valorF: calculationType === "seriesUniformes" && calcularEnSeries !== "F" ? parseFloat(valorF) : undefined,
+        calcularEnSeries: calculationType === "seriesUniformes" ? calcularEnSeries : undefined
       }
     };
     
@@ -156,10 +172,14 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   const botonCalcularDisabled =
     // !selectedInputs.interestRate ||
     !selectedInputs.cashflows ||
-    flujos.length === 0 ||
+    (calculationType !== "seriesUniformes" && flujos.length === 0) ||
     (calculationType === "valorEnN" && !targetPeriod) ||
     (calculationType === "periodosParaMonto" && !montoObjetivo) ||
-    (calculationType === "incognitaX" && !hasFlujosConX());
+    (calculationType === "incognitaX" && !hasFlujosConX()) ||
+    (calculationType === "seriesUniformes" && !selectedInputs.interestRate) ||
+    (calculationType === "seriesUniformes" && calcularEnSeries === "A" && (!valorP && !valorF)) ||
+    (calculationType === "seriesUniformes" && calcularEnSeries === "P" && !valorA) ||
+    (calculationType === "seriesUniformes" && calcularEnSeries === "F" && !valorA);
 
   return (
     <div className="space-y-8">
@@ -492,6 +512,135 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {calculationType === "seriesUniformes" && (
+              <div className="p-4 border rounded-md bg-gray-50 space-y-3">
+                <p className="text-center text-sm font-medium">
+                  Resolver series uniformes
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Tipo de anualidad</label>
+                    <div className="flex space-x-4">
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          className="form-radio h-4 w-4 text-indigo-600"
+                          value="vencida"
+                          checked={tipoAnualidad === "vencida"}
+                          onChange={() => setTipoAnualidad("vencida")}
+                        />
+                        <span className="ml-2 text-sm">Vencida</span>
+                      </label>
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          className="form-radio h-4 w-4 text-indigo-600"
+                          value="anticipada"
+                          checked={tipoAnualidad === "anticipada"}
+                          onChange={() => setTipoAnualidad("anticipada")}
+                        />
+                        <span className="ml-2 text-sm">Anticipada</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Periodo inicial</label>
+                      <input
+                        type="number"
+                        className="mt-1 block w-full p-2 bg-white rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value={periodoInicial}
+                        onChange={(e) => setPeriodoInicial(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Periodo final</label>
+                      <input
+                        type="number"
+                        className="mt-1 block w-full p-2 bg-white rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value={periodoFinal}
+                        onChange={(e) => setPeriodoFinal(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">¿Qué desea calcular?</label>
+                    <select
+                      className="mt-1 block w-full p-2 bg-white rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      value={calcularEnSeries}
+                      onChange={(e) => setCalcularEnSeries(e.target.value as "A" | "P" | "F")}
+                    >
+                      <option value="A">Valor de la anualidad (A)</option>
+                      <option value="P">Valor presente (P)</option>
+                      <option value="F">Valor futuro (F)</option>
+                    </select>
+                  </div>
+
+                  {calcularEnSeries === "A" && (
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium">Para calcular A, ingrese P o F:</p>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Valor presente (P)</label>
+                        <input
+                          type="number"
+                          className="mt-1 block w-full p-2 bg-white rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          value={valorP}
+                          onChange={(e) => setValorP(e.target.value)}
+                          placeholder="Opcional si se ingresa F"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Valor futuro (F)</label>
+                        <input
+                          type="number"
+                          className="mt-1 block w-full p-2 bg-white rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          value={valorF}
+                          onChange={(e) => setValorF(e.target.value)}
+                          placeholder="Opcional si se ingresa P"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {calcularEnSeries === "P" && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Valor de la anualidad (A)</label>
+                      <input
+                        type="number"
+                        className="mt-1 block w-full p-2 bg-white rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value={valorA}
+                        onChange={(e) => setValorA(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {calcularEnSeries === "F" && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Valor de la anualidad (A)</label>
+                      <input
+                        type="number"
+                        className="mt-1 block w-full p-2 bg-white rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value={valorA}
+                        onChange={(e) => setValorA(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <strong>Información:</strong> Las fórmulas utilizadas para series uniformes varían dependiendo del tipo de anualidad y del valor que se desea calcular.
+                    </p>
+                    <ul className="list-disc pl-5 text-sm text-blue-800 mt-1">
+                      <li>Para anualidad vencida, P está un periodo antes del inicio y F está en el último periodo</li>
+                      <li>Para anualidad anticipada, P está en el primer periodo y F está en el último periodo</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 
-type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX';
+type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incognitaX' | 'seriesUniformes';
 
 interface CalculationSelectorProps {
   calculationType: CalculationType;
@@ -60,6 +60,18 @@ const CalculationSelector: React.FC<CalculationSelectorProps> = ({
           className="mr-2"
         />
         <label htmlFor="incognitaX">Hallar incógnita (X) en flujos</label>
+      </div>
+      <div>
+        <input
+          type="radio"
+          id="seriesUniformes"
+          name="calculationType"
+          value="seriesUniformes"
+          checked={calculationType === 'seriesUniformes'}
+          onChange={(e) => onCalculationTypeChange(e.target.value as CalculationType)}
+          className="mr-2"
+        />
+        <label htmlFor="seriesUniformes">Resolver series uniformes</label>
       </div>
     </div>
   );
