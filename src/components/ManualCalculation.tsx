@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import calcular from "@/utils/calculos.utils";
 import { ObjetivoCalculo } from "@/utils/calculos.utils";
 import CashFlowGraph from './CashFlowGraph';
@@ -48,6 +48,17 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   const [resultDescription, setResultDescription] = useState<string>("");
   const [resultValue, setResultValue] = useState<string>("");
 
+  // Effect to handle input state based on calculationType
+  useEffect(() => {
+    // If calculationType is seriesUniformes, deselect cashflows
+    if (calculationType === 'seriesUniformes' && selectedInputs.cashflows) {
+      setSelectedInputs(prev => ({
+        ...prev,
+        cashflows: false
+      }));
+    }
+  }, [calculationType]);
+
   const agregarFlujo = () => {
     // Add new cash flow without sorting
     setFlujos([...flujos, { n: 0, monto: 0, tipo: "entrada" as "entrada" | "salida" }]);
@@ -86,6 +97,11 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   };
   
   const handleCheckboxChange = (input: keyof typeof selectedInputs) => {
+    // If calculationType is seriesUniformes and trying to toggle cashflows, do nothing
+    if (calculationType === 'seriesUniformes' && input === 'cashflows') {
+      return;
+    }
+    
     setSelectedInputs({
       ...selectedInputs,
       [input]: !selectedInputs[input]
@@ -116,22 +132,28 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
     
     let tasaInteresCalculos = selectedInputs.interestRate ? parseFloat(interestRate) : undefined;
     
-    // Si tenemos tasa de interés y períodos seleccionados, convertimos la tasa
-    if (selectedInputs.interestRate && selectedInputs.periods) {
-      // Convertir la tasa a tasa periódica vencida según la periodicidad de n
+    // Si tenemos tasa de interés y períodos seleccionados o si es seriesUniformes, convertimos la tasa
+    if (selectedInputs.interestRate && 
+        (selectedInputs.periods || calculationType === 'seriesUniformes')) {
+      // Convertir la tasa a tasa periódica vencida según la periodicidad seleccionada
       const fromType = formaPago === "vencida" ? 
         (periodoPago === periodoCapitalizacion ? "iev" : "Tnv") : 
         (periodoPago === periodoCapitalizacion ? "iea" : "Tna");
       
-      // Convertir a tasa periódica vencida según periodicidad de n
+      // Para series uniformes, usamos la periodicidad de los periodos definidos (periodoInicial a periodoFinal)
+      const periodoDestino = (calculationType === 'seriesUniformes' && !selectedInputs.periods) ? 
+        periodicidad : // Si no hay periodos seleccionados, usar la periodicidad definida para series uniformes
+        periodicidad;  // Si hay periodos, usar esa periodicidad
+      
+      // Convertir a tasa periódica vencida según periodicidad correspondiente
       tasaInteresCalculos = convertInterestRate({
         valor: parseFloat(interestRate),
         tipoOrigen: fromType as any,
         periodoPagoOrigen: periodoPago as any,
         periodoCapitalizacionOrigen: periodoCapitalizacion as any,
         tipoDestino: "iev" as any, // Siempre queremos tasa periódica vencida
-        periodoPagoDestino: periodicidad as any,
-        periodoCapitalizacionDestino: periodicidad as any // Igualamos PC con PP en destino para tasa periódica
+        periodoPagoDestino: periodoDestino as any,
+        periodoCapitalizacionDestino: periodoDestino as any // Igualamos PC con PP en destino para tasa periódica
       });
 
       console.log("tasaInteresCalculos: ", tasaInteresCalculos);
@@ -344,8 +366,9 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                 checked={selectedInputs.cashflows}
                 onChange={() => handleCheckboxChange('cashflows')}
                 className="h-5 w-5"
+                disabled={calculationType === 'seriesUniformes'} // Deshabilitar cuando es series uniformes
               />
-              <label htmlFor="cashflowsCheck" className="text-md">
+              <label htmlFor="cashflowsCheck" className={`text-md ${calculationType === 'seriesUniformes' ? 'text-gray-400' : ''}`}>
                 Flujos de transacciones
               </label>
             </div>
@@ -545,6 +568,26 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                         <span className="ml-2 text-sm">Anticipada</span>
                       </label>
                     </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm font-medium">Periodicidad:</label>
+                    <select
+                      className="p-2 border rounded-md text-sm"
+                      value={periodicidad}
+                      onChange={(e) => setPeriodicidad(e.target.value)}
+                      title="Periodicidad de Series Uniformes"
+                    >
+                      <option value="diaria">Diaria</option>
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                      <option value="bimestral">Bimestral</option>
+                      <option value="trimestral">Trimestral</option>
+                      <option value="cuatrimestral">Cuatrimestral</option>
+                      <option value="semestral">Semestral</option>
+                      <option value="anual">Anual</option>
+                    </select>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
