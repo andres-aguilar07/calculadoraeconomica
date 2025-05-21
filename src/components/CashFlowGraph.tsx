@@ -1,261 +1,146 @@
 import React from 'react';
-import { BsArrowUpCircleFill, BsArrowDownCircleFill } from 'react-icons/bs';
 
-interface CashFlowGraphProps {
+interface CashFlowProps {
   cashflows: Array<{
     n: number;
     monto: number | string;
     tipo: "entrada" | "salida";
   }>;
   periods?: number;
-  targetPeriod?: number; // Período objetivo para valorEnN
-  focalPoint?: number; // Punto focal para incognitaX
+  targetPeriod?: number;
+  focalPoint?: number;
 }
 
-const CashFlowGraph: React.FC<CashFlowGraphProps> = ({ cashflows, periods, targetPeriod, focalPoint }) => {
-  // Primero determinamos el máximo período basado en la jerarquía:
-  // 1. periods (si está definido)
-  // 2. targetPeriod (si está definido)
-  // 3. focalPoint (si está definido)
-  // 4. máximo período de los flujos
-  const maxPeriodFromCashflows = Math.max(...cashflows.map(f => f.n));
-  const maxPeriodFromInputs = periods !== undefined ? periods : 
-                              targetPeriod !== undefined ? targetPeriod : 
-                              focalPoint !== undefined ? focalPoint :
-                              maxPeriodFromCashflows;
+const CashFlowGraph: React.FC<CashFlowProps> = ({ 
+  cashflows, 
+  periods = 12,
+  targetPeriod,
+  focalPoint
+}) => {
+  // Encontrar el periodo máximo
+  const maxPeriod = Math.max(
+    periods || 0,
+    ...cashflows.map(flow => flow.n),
+    targetPeriod !== undefined ? targetPeriod : 0,
+    focalPoint !== undefined ? focalPoint : 0
+  );
   
-  // Si tenemos targetPeriod o focalPoint, siempre queremos mostrar desde 0 hasta el máximo
-  const minPeriod = (targetPeriod !== undefined || focalPoint !== undefined) ? 0 : Math.min(...cashflows.map(flow => flow.n));
-  const maxPeriod = Math.max(maxPeriodFromInputs, maxPeriodFromCashflows);
+  // Crear un array de periodos desde 0 hasta el máximo
+  const timeline = Array.from({ length: maxPeriod + 1 }, (_, i) => i);
   
-  const totalPeriods = maxPeriod - minPeriod + 1;
-
-  // Crear un array con todos los periodos
-  const allPeriods = Array.from({ length: totalPeriods }, (_, i) => i + minPeriod);
-
-  // Calcular la altura máxima para las flechas (60% del contenedor)
-  const MAX_ARROW_HEIGHT = 60;
-
-  // Procesar los flujos para agruparlos por período y tipo
-  const processedFlows = allPeriods.map(period => {
-    const flowsInPeriod = cashflows.filter(f => f.n === period);
-    
-    // Agrupar y sumar los flujos de entrada
-    const entradas = flowsInPeriod.filter(f => f.tipo === "entrada");
-    let montoEntrada: number | string = 0;
-    
-    for (const flow of entradas) {
-      if (typeof flow.monto === 'number' && typeof montoEntrada === 'number') {
-        montoEntrada += flow.monto;
-      } else {
-        // Si hay al menos un string, usamos el string para mostrar (e.g. "X")
-        montoEntrada = typeof montoEntrada === 'string' ? montoEntrada : flow.monto;
-      }
+  // Función para determinar la altura de la barra
+  const getBarHeight = (monto: number | string): number => {
+    if (typeof monto === 'string') {
+      // Si es una expresión con x, mostrar una altura fija para representación
+      return 50; // Altura fija para flujos con incógnita X
     }
-    
-    // Agrupar y sumar los flujos de salida
-    const salidas = flowsInPeriod.filter(f => f.tipo === "salida");
-    let montoSalida: number | string = 0;
-    
-    for (const flow of salidas) {
-      if (typeof flow.monto === 'number' && typeof montoSalida === 'number') {
-        montoSalida += flow.monto;
-      } else {
-        montoSalida = typeof montoSalida === 'string' ? montoSalida : flow.monto;
-      }
-    }
-
-    return {
-      period,
-      entrada: entradas.length > 0 ? { monto: montoEntrada } : null,
-      salida: salidas.length > 0 ? { monto: montoSalida } : null
-    };
-  });
-
-  // Encontrar el monto máximo para escalar las flechas, solo considerando valores numéricos
-  const montosEntrada = processedFlows
-    .filter(flow => flow.entrada !== null && typeof flow.entrada.monto === 'number')
-    .map(flow => Math.abs(flow.entrada!.monto as number));
-  
-  const montosSalida = processedFlows
-    .filter(flow => flow.salida !== null && typeof flow.salida.monto === 'number')
-    .map(flow => Math.abs(flow.salida!.monto as number));
-  
-  const montosFlujos = [...montosEntrada, ...montosSalida];
-  const maxAmount = montosFlujos.length > 0 ? Math.max(...montosFlujos) : 1;
-
-  // Función para formatear el monto para mostrar
-  const formatMonto = (monto: number | string): string => {
-    if (typeof monto === 'number') {
-      return monto.toLocaleString();
-    }
-    // Si es una expresión con X, la mostramos directamente
-    return monto.toString();
+    return Math.min(Math.abs(monto) / 10, 150); // Limitar la altura máxima
   };
-
+  
   return (
     <div className="w-full overflow-x-auto">
-      <div className="min-w-[600px] p-6">
-        {/* Línea de tiempo */}
-        <div className="relative">
-          {/* Contenedor para periodos y flechas con padding extra arriba y abajo */}
-          <div className="flex justify-between relative py-16" style={{ minHeight: '250px' }}>
-            {/* Línea horizontal - Ahora dentro del contenedor flex */}
-            <div className="absolute left-0 right-0 h-0.5 bg-gray-300 top-1/2 transform -translate-y-1/2" />
-
-            {processedFlows.map(({ period, entrada, salida }) => {
-              // Calcular alturas de flechas
-              const entradaHeight = entrada 
-                ? (typeof entrada.monto === 'number' 
-                    ? (Math.abs(entrada.monto) / maxAmount) * MAX_ARROW_HEIGHT 
-                    : 40) 
-                : 0;
+      <div className="min-w-fit" style={{ minWidth: `${Math.max(800, (maxPeriod + 1) * 60)}px` }}>
+        
+        {/* Eje X - Línea del tiempo */}
+        <div className="flex items-center border-t border-gray-300 relative h-6 mb-4">
+          {timeline.map(n => (
+            <div 
+              key={n} 
+              className={`flex-1 text-center text-xs ${
+                (targetPeriod === n || focalPoint === n) ? 'font-bold text-blue-600' : ''
+              }`}
+            >
+              {n}
+              {targetPeriod === n && <span className="block text-[10px] text-blue-600">Objetivo</span>}
+              {focalPoint === n && <span className="block text-[10px] text-blue-600">Punto focal</span>}
+            </div>
+          ))}
+        </div>
+        
+        {/* Flujos de efectivo */}
+        <div className="h-[200px] relative flex">
+          {/* Línea central */}
+          <div className="absolute left-0 right-0 top-1/2 border-b border-gray-300"></div>
+          
+          {/* Líneas verticales para cada periodo */}
+          {timeline.map(n => (
+            <div 
+              key={n} 
+              className={`flex-1 relative ${
+                (targetPeriod === n || focalPoint === n) ? 'bg-blue-50' : ''
+              }`}
+            >
+              {/* Línea vertical */}
+              <div className="absolute h-full w-px bg-gray-200 left-1/2"></div>
               
-              const salidaHeight = salida 
-                ? (typeof salida.monto === 'number' 
-                    ? (Math.abs(salida.monto) / maxAmount) * MAX_ARROW_HEIGHT 
-                    : 40) 
-                : 0;
-
-              // Verificar si este período es el objetivo
-              const isTargetPeriod = targetPeriod !== undefined && period === targetPeriod;
-              // Verificar si este período es el punto focal
-              const isFocalPoint = focalPoint !== undefined && period === focalPoint;
-              // Verificar si es período inicial o final para etiquetas especiales
-              const isInitialPeriod = period === 0 && targetPeriod === 0;
-              const isFinalPeriod = period === maxPeriod && targetPeriod === maxPeriod;
-
-              return (
-                <div key={period} className="flex flex-col items-center justify-center relative" style={{ flex: 1 }}>
-                  {/* Número de periodo */}
-                  <div className={`absolute bottom-0 text-sm font-medium ${isFocalPoint ? 'text-blue-600 font-bold' : ''}`} style={{ bottom: '-2rem' }}>
-                    {period}
-                  </div>
-
-                  {/* Marca vertical en la línea de tiempo */}
-                  <div className={`absolute h-3 w-0.5 ${isFocalPoint ? 'bg-blue-500' : 'bg-gray-300'} top-1/2 transform -translate-y-1/2`} />
-
-                  {/* Flecha para período objetivo */}
-                  {isTargetPeriod && (
+              {/* Flujos en este periodo */}
+              {cashflows
+                .filter(flow => flow.n === n)
+                .map((flow, idx) => {
+                  const isEntranceFlow = flow.tipo === 'entrada';
+                  const isXFlow = typeof flow.monto === 'string';
+                  
+                  return (
                     <div 
-                      className="absolute top-[calc(50%-5px)] transform -translate-y-full flex flex-col items-center"
+                      key={idx}
+                      className={`absolute left-0 right-0 mx-auto w-8 flex flex-col items-center ${
+                        isEntranceFlow ? 'bottom-1/2' : 'top-1/2'
+                      }`}
                       style={{ 
-                        height: `40%`,
-                        minHeight: '30px',
-                        maxHeight: '80%',
-                        transition: 'all 0.3s ease'
+                        transform: `translateY(${isEntranceFlow ? '' : ''}8px)` 
                       }}
                     >
-                      <div className="flex-shrink-0 relative">
-                        <BsArrowUpCircleFill 
-                          className="text-black" 
-                          size={28} 
-                        />
-                        {/* Mostrar P o F si es período inicial o final */}
-                        {isInitialPeriod && (
-                          <div className="absolute w-full h-full flex items-center justify-center top-0 left-0">
-                            <span className="text-white font-bold text-sm">P</span>
-                          </div>
-                        )}
-                        {isFinalPeriod && (
-                          <div className="absolute w-full h-full flex items-center justify-center top-0 left-0">
-                            <span className="text-white font-bold text-sm">F</span>
-                          </div>
-                        )}
-                      </div>
-                      {/* Mostrar la flecha solo si no es P ni F */}
-                      {!isInitialPeriod && !isFinalPeriod && (
-                        <>
-                          <div className="h-full w-0.5 bg-black -mt-1" />
-                          <span className="text-sm font-medium text-black mt-1 whitespace-nowrap">
-                            Valor en n={period}
-                          </span>
-                        </>
-                      )}
-                      {/* Texto para P y F sin mostrar flecha */}
-                      {(isInitialPeriod || isFinalPeriod) && (
-                        <span className="text-sm font-medium text-black mt-1 whitespace-nowrap">
-                          {isInitialPeriod ? 'Valor Presente (P)' : 'Valor Futuro (F)'}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Indicador para punto focal */}
-                  {isFocalPoint && !isTargetPeriod && (
-                    <div 
-                      className="absolute top-[calc(50%-5px)] transform -translate-y-full flex flex-col items-center"
-                      style={{ 
-                        height: `40%`,
-                        minHeight: '30px',
-                        maxHeight: '80%',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      <div className="flex-shrink-0 relative">
-                        <BsArrowUpCircleFill 
-                          className="text-blue-500" 
-                          size={28} 
-                        />
-                      </div>
-                      <div className="h-full w-0.5 bg-blue-500 -mt-1" />
-                      <span className="text-sm font-medium text-blue-600 mt-1 whitespace-nowrap">
-                        Punto Focal (X)
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Flecha de entrada si hay flujo de entrada */}
-                  {entrada && (
-                    <div 
-                      className="absolute top-[calc(50%-5px)] transform -translate-y-full flex flex-col items-center"
-                      style={{ 
-                        height: `${entradaHeight}%`,
-                        minHeight: '30px',
-                        maxHeight: '80%',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      <div className="flex-shrink-0">
-                        <BsArrowUpCircleFill 
-                          className={`${typeof entrada.monto === 'string' ? 'text-purple-500' : 'text-green-500'}`} 
-                          size={28} // Tamaño fijo para el icono
-                        />
-                      </div>
-                      <div className={`h-full w-0.5 ${typeof entrada.monto === 'string' ? 'bg-purple-500' : 'bg-green-500'} -mt-1`} />
-                      <span className={`text-sm font-medium ${typeof entrada.monto === 'string' ? 'text-purple-600' : 'text-green-600'} mt-1 whitespace-nowrap`}>
-                        +{typeof entrada.monto === 'number' ? '$' : ''}{formatMonto(entrada.monto)}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Flecha de salida si hay flujo de salida */}
-                  {salida && (
-                    <div 
-                      className="absolute top-[calc(50%+5px)] flex flex-col items-center"
-                      style={{ 
-                        height: `${salidaHeight}%`,
-                        minHeight: '30px',
-                        maxHeight: '80%',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      <span className={`text-sm font-medium ${typeof salida.monto === 'string' ? 'text-purple-600' : 'text-red-600'} mb-1 whitespace-nowrap`}>
-                        -{typeof salida.monto === 'number' ? '$' : ''}{formatMonto(salida.monto)}
-                      </span>
-                      <div className={`h-full w-0.5 ${typeof salida.monto === 'string' ? 'bg-purple-500' : 'bg-red-500'} -mb-1`} />
-                      <div className="flex-shrink-0">
-                        <BsArrowDownCircleFill 
-                          className={`${typeof salida.monto === 'string' ? 'text-purple-500' : 'text-red-500'}`} 
-                          size={28} // Tamaño fijo para el icono
-                        />
+                      {/* Barra de flujo */}
+                      <div 
+                        className={`w-8 ${
+                          isXFlow 
+                            ? 'bg-purple-400 bg-opacity-70 border border-purple-500' 
+                            : isEntranceFlow 
+                              ? 'bg-green-400 bg-opacity-70 border border-green-500' 
+                              : 'bg-red-400 bg-opacity-70 border border-red-500'
+                        } rounded-sm`}
+                        style={{ 
+                          height: `${getBarHeight(flow.monto)}px`,
+                          marginBottom: isEntranceFlow ? '0' : '', 
+                          marginTop: isEntranceFlow ? '' : '0'
+                        }}
+                      ></div>
+                      
+                      {/* Etiqueta del monto */}
+                      <div className={`text-xs font-medium mt-1 whitespace-nowrap ${
+                        isXFlow ? 'text-purple-700' : isEntranceFlow ? 'text-green-700' : 'text-red-700'
+                      }`}>
+                        {isXFlow ? `${flow.monto}` : `$${typeof flow.monto === 'number' ? flow.monto.toLocaleString() : flow.monto}`}
                       </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+            </div>
+          ))}
+        </div>
+        
+        {/* Leyenda */}
+        <div className="flex justify-center space-x-4 mt-4 text-xs">
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-green-400 border border-green-500 mr-1"></div>
+            <span>Entrada</span>
           </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-red-400 border border-red-500 mr-1"></div>
+            <span>Salida</span>
+          </div>
+          {cashflows.some(flow => typeof flow.monto === 'string') && (
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-purple-400 border border-purple-500 mr-1"></div>
+              <span>Incógnita X</span>
+            </div>
+          )}
+          {(targetPeriod !== undefined || focalPoint !== undefined) && (
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-blue-50 border border-blue-200 mr-1"></div>
+              <span>{targetPeriod !== undefined ? 'Periodo objetivo' : 'Punto focal'}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

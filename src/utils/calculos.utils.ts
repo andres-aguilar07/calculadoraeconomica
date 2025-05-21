@@ -204,7 +204,7 @@ function calcularTIR(
     flujos: Flujo[],
     targetPeriod: number = 0,
     precision: number = 1e-6,
-    tasaInteresOutflows?: number,
+    _tasaInteresOutflows?: number, // Prefixed with underscore to indicate it's intentionally unused
     useDifferentialRates?: boolean
 ): number | null {
     // Verificar que no hay flujos con expresiones X

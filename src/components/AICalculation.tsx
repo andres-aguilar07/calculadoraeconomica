@@ -1,11 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import calcular from "@/utils/calculos.utils";
 import { ObjetivoCalculo } from "@/utils/calculos.utils";
 import CashFlowGraph from './CashFlowGraph';
-import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
-
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || '');
 
 // Función de espera
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -31,83 +27,38 @@ type CalculationType = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' | 'incog
 
 interface CashFlow {
   n: number;
-  monto: number;
+  monto: number | string;
   tipo: "entrada" | "salida";
 }
 
 interface ExtractedData {
-  interestRate: number;
-  periods: number;
-  cashflows: CashFlow[];
+  // Datos comunes para todos los tipos de cálculo
+  interestRate?: number;
+  periods?: number;
+  cashflows?: CashFlow[];
+  
+  // Datos específicos para valorEnN
+  targetPeriod?: number;
+  
+  // Datos específicos para periodosParaMonto
+  targetAmount?: number;
+  
+  // Datos específicos para incognitaX
+  focalPoint?: number;
+  
+  // Datos específicos para series uniformes
+  annuityType?: "vencida" | "anticipada";
+  initialPeriod?: number;
+  finalPeriod?: number;
+  aValue?: number;
+  pValue?: number;
+  fValue?: number;
+  seriesCalculationType?: "A" | "P" | "F";
 }
 
 interface AICalculationProps {
   calculationType: CalculationType;
 }
-
-// Fallback para análisis local (sin API)
-const analyzeLocalFallback = (problemText: string): ExtractedData => {
-  // Implementación básica para extraer datos del texto
-  // Esta es una implementación simple que intenta extraer patrones comunes
-  
-  let interestRate = 0.05; // Default: 5%
-  let periods = 12; // Default: 12 meses
-  let cashflows: CashFlow[] = [];
-  
-  // Buscar porcentajes
-  const percentMatch = problemText.match(/(\d+(\.\d+)?)(\s*)(%)/);
-  if (percentMatch) {
-    interestRate = parseFloat(percentMatch[1]) / 100;
-  }
-  
-  // Buscar periodos/meses/años
-  const periodMatch = 
-    problemText.match(/(\d+)(\s*)(meses|mes|años|año|periodos|periodo)/i) || 
-    problemText.match(/durante(\s*)(\d+)(\s*)(meses|mes|años|año|periodos|periodo)/i);
-  
-  if (periodMatch) {
-    periods = parseInt(periodMatch[1] || periodMatch[2]);
-    // Convertir años a meses si es necesario
-    if (periodMatch[0].toLowerCase().includes('año')) {
-      periods *= 12;
-    }
-  }
-  
-  // Buscar montos/flujos
-  const montoMatches = problemText.match(/\$(\d+([,\.]\d+)?)/g);
-  if (montoMatches && montoMatches.length > 0) {
-    // Asumir que el primer monto es una entrada
-    cashflows.push({
-      n: 0,
-      monto: parseFloat(montoMatches[0].replace(/[\$,]/g, '')),
-      tipo: "entrada"
-    });
-    
-    // Si hay otro monto, asumirlo como objetivo o flujo recurrente
-    if (montoMatches.length > 1) {
-      const secondAmount = parseFloat(montoMatches[1].replace(/[\$,]/g, ''));
-      // Si es mayor que el primer monto, probablemente sea un objetivo
-      if (secondAmount > cashflows[0].monto) {
-        // No añadir flujo
-      } else {
-        // Probablemente sea un flujo recurrente
-        for (let i = 1; i <= periods; i++) {
-          cashflows.push({
-            n: i,
-            monto: secondAmount,
-            tipo: "entrada"
-          });
-        }
-      }
-    }
-  }
-  
-  return {
-    interestRate,
-    periods,
-    cashflows
-  };
-};
 
 const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
   const [problemDescription, setProblemDescription] = useState("");
@@ -116,10 +67,105 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
   const [resultDescription, setResultDescription] = useState("");
   const [resultValue, setResultValue] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [currentApiMode, setCurrentApiMode] = useState<'gemini' | 'fallback'>('gemini');
   const [retryAttempt, setRetryAttempt] = useState(0);
-  const [useLocalFallback, setUseLocalFallback] = useState(false);
-  
+
+  const getPromptForCalculationType = (type: CalculationType, problemText: string): string => {
+    let basePrompt = `Analiza el siguiente problema financiero y extrae los datos relevantes. NO resuelvas el problema, solo extrae los datos en formato JSON. `;
+    
+    // Instrucciones específicas según el tipo de cálculo
+    switch (type) {
+      case 'valorEnN':
+        basePrompt += `Necesito calcular el valor en un periodo específico.
+        El JSON debe incluir:
+        {
+          "interestRate": número (tasa de interés en decimal),
+          "periods": número (número total de periodos),
+          "cashflows": [
+            {
+              "n": número (periodo),
+              "monto": número (cantidad),
+              "tipo": "entrada" o "salida"
+            }
+          ],
+          "targetPeriod": número (periodo específico en el que se desea calcular el valor)
+        }`;
+        break;
+        
+      case 'tasaInteres':
+        basePrompt += `Necesito calcular la tasa de interés.
+        El JSON debe incluir:
+        {
+          "periods": número (número total de periodos),
+          "cashflows": [
+            {
+              "n": número (periodo),
+              "monto": número (cantidad),
+              "tipo": "entrada" o "salida"
+            }
+          ]
+        }`;
+        break;
+        
+      case 'periodosParaMonto':
+        basePrompt += `Necesito calcular cuántos periodos se necesitan para alcanzar un monto objetivo.
+        El JSON debe incluir:
+        {
+          "interestRate": número (tasa de interés en decimal),
+          "cashflows": [
+            {
+              "n": número (periodo),
+              "monto": número (cantidad),
+              "tipo": "entrada" o "salida"
+            }
+          ],
+          "targetAmount": número (monto objetivo a alcanzar)
+        }`;
+        break;
+        
+      case 'incognitaX':
+        basePrompt += `Necesito encontrar el valor de una incógnita X en flujos de efectivo.
+        El JSON debe incluir:
+        {
+          "interestRate": número (tasa de interés en decimal),
+          "cashflows": [
+            {
+              "n": número (periodo),
+              "monto": número o string (puede ser "x", "2x", etc. para representar la incógnita),
+              "tipo": "entrada" o "salida"
+            }
+          ],
+          "focalPoint": número (punto focal para el cálculo, generalmente periodo 0)
+        }
+        Siempre debe haber al menos un flujo que contenga "x" en su monto.`;
+        break;
+        
+      case 'seriesUniformes':
+        basePrompt += `Necesito resolver una serie uniforme (anualidad).
+        El JSON debe incluir:
+        {
+          "interestRate": número (tasa de interés en decimal),
+          "annuityType": "vencida" o "anticipada" (tipo de anualidad),
+          "initialPeriod": número (periodo inicial, generalmente 1),
+          "finalPeriod": número (periodo final),
+          "seriesCalculationType": "A", "P" o "F" (qué valor calcular: A=anualidad, P=presente, F=futuro),
+          "aValue": número (valor de la anualidad A, si se conoce),
+          "pValue": número (valor presente P, si se conoce),
+          "fValue": número (valor futuro F, si se conoce)
+        }
+        NOTA: Dependiendo de qué valor se desea calcular, se deben proporcionar los otros valores.
+        Para calcular A, se necesita P o F. Para calcular P, se necesita A. Para calcular F, se necesita A.`;
+        break;
+    }
+    
+    basePrompt += `
+    
+    Problema: ${problemText}
+    
+    Responde SOLO con el JSON, sin texto adicional. Si algún dato no está explícito en el problema, usa valores razonables basados en el contexto. Si no puedes determinar algún valor, omítelo del JSON.`;
+    
+    return basePrompt;
+  };
+
   const analyzeWithGemini = async (problemText: string, attempt: number = 1): Promise<ExtractedData> => {
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -127,37 +173,68 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
         throw new Error("API key no configurada. Por favor, configura VITE_GEMINI_API_KEY en el archivo .env");
       }
 
-      const model: GenerativeModel = genAI.getGenerativeModel({ model: "gemini-" });
+      const promptText = getPromptForCalculationType(calculationType, problemText);
       
-      const promptText = `Analiza el siguiente problema financiero y extrae los datos relevantes en formato JSON. 
-      El JSON debe tener la siguiente estructura:
-      {
-        "interestRate": número (tasa de interés en decimal),
-        "periods": número (número de periodos),
-        "cashflows": [
-          {
-            "n": número (periodo),
-            "monto": número (cantidad),
-            "tipo": "entrada" o "salida"
-          }
-        ]
-      }
-      
-      Problema: ${problemText}
-      
-      Responde SOLO con el JSON, sin texto adicional. Si algún dato no está explícito en el problema, usa valores razonables por defecto.`;
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: promptText
+                }
+              ]
+            }
+          ]
+        })
+      });
 
-      const result = await model.generateContent(promptText);
-      const response = await result.response;
-      const responseText = response.text();
+      if (!response.ok) {
+        const errorDetail = await response.text();
+        throw new Error(`Error en la API de Gemini (${response.status}): ${errorDetail}`);
+      }
+
+      const data = await response.json();
+      
+      // Extraer el texto de la respuesta
+      const responseText = data.candidates[0].content.parts[0].text;
       
       try {
-        // Parse the JSON response
-        const parsedData = JSON.parse(responseText) as ExtractedData;
+        // Buscar el JSON en la respuesta
+        const jsonMatch = responseText.match(/```json\n([\s\S]*)\n```/) || 
+                          responseText.match(/```\n([\s\S]*)\n```/) || 
+                          responseText.match(/\{[\s\S]*\}/);
         
-        // Validar la estructura de los datos
-        if (!parsedData.interestRate || !parsedData.periods || !Array.isArray(parsedData.cashflows)) {
-          throw new Error("Formato de respuesta inválido");
+        let jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
+        
+        // Limpiar el string JSON de posibles comentarios o texto adicional
+        jsonString = jsonString.replace(/```json|```/g, '').trim();
+        
+        // Parse the JSON response
+        const parsedData = JSON.parse(jsonString) as ExtractedData;
+        
+        // Procesamiento adicional para casos específicos
+        if (calculationType === 'incognitaX' && parsedData.cashflows) {
+          // Asegurarse de que al menos un flujo tenga 'x' en su monto
+          const hasXFlow = parsedData.cashflows.some(flow => 
+            typeof flow.monto === 'string' && flow.monto.toLowerCase().includes('x')
+          );
+          
+          if (!hasXFlow) {
+            // Si no hay flujos con X, convertir el primer flujo a tener X
+            if (parsedData.cashflows.length > 0) {
+              parsedData.cashflows[0].monto = "x";
+            } else {
+              // Si no hay flujos, crear uno con X
+              parsedData.cashflows = [
+                { n: 0, monto: "x", tipo: "entrada" }
+              ];
+            }
+          }
         }
         
         return parsedData;
@@ -181,12 +258,6 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
         return analyzeWithGemini(problemText, attempt + 1);
       }
       
-      // Si se agotaron los reintentos o hay otro tipo de error, usar el fallback local
-      if (useLocalFallback) {
-        console.log("Usando análisis local fallback");
-        return analyzeLocalFallback(problemText);
-      }
-      
       throw error;
     }
   };
@@ -195,87 +266,22 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
     setIsAnalyzing(true);
     setError(null);
     setRetryAttempt(0);
-    setCurrentApiMode('gemini');
     
     try {
-      // Llamar a la API de Gemini para analizar el texto o usar fallback
-      let extractedData: ExtractedData;
-      
-      if (useLocalFallback) {
-        extractedData = analyzeLocalFallback(problemDescription);
-        setCurrentApiMode('fallback');
-      } else {
-        try {
-          extractedData = await analyzeWithGemini(problemDescription);
-        } catch (error) {
-          console.error("Error con Gemini API, usando fallback:", error);
-          extractedData = analyzeLocalFallback(problemDescription);
-          setCurrentApiMode('fallback');
-        }
-      }
-      
+      // Llamar a la API de Gemini para analizar el texto
+      const extractedData = await analyzeWithGemini(problemDescription);
       setExtractedData(extractedData);
 
       // Realizar el cálculo con los datos extraídos
-      const calculationData = {
-        objetivo: calculationType as ObjetivoCalculo,
-        entradas: {
-          tasaInteres: extractedData.interestRate,
-          periodos: extractedData.periods,
-          flujosEfectivo: extractedData.cashflows,
-          periodoObjetivo: calculationType === "valorEnN" ? 12 : undefined,
-          montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined,
-          tipoAnualidad: calculationType === "seriesUniformes" ? ("vencida" as "vencida" | "anticipada") : undefined,
-          periodoInicial: calculationType === "seriesUniformes" ? 1 : undefined,
-          periodoFinal: calculationType === "seriesUniformes" ? 10 : undefined,
-          valorA: calculationType === "seriesUniformes" ? 1000 : undefined,
-          calcularEnSeries: calculationType === "seriesUniformes" ? ("P" as "A" | "P" | "F") : undefined
-        }
-      };
-
-      const result = calcular.resolverEcuacionValor(calculationData);
-      setResultDescription(result.descripcion);
-      setResultValue(result.valor.toString());
+      calculateResult(extractedData);
+      
     } catch (error: any) {
       console.error("Error al analizar el problema:", error);
       let errorMessage = "Error al analizar el problema";
       
       if (error instanceof Error) {
         if (error.message.includes('429') || error.message.includes('RATE_LIMIT')) {
-          errorMessage = "Límite de solicitudes excedido. Hemos cambiado automáticamente al modo de análisis local. Los datos extraídos pueden ser menos precisos.";
-          
-          // Intentar con fallback local
-          try {
-            const fallbackData = analyzeLocalFallback(problemDescription);
-            setExtractedData(fallbackData);
-            setCurrentApiMode('fallback');
-            
-            // Realizar el cálculo con los datos extraídos
-            const calculationData = {
-              objetivo: calculationType as ObjetivoCalculo,
-              entradas: {
-                tasaInteres: fallbackData.interestRate,
-                periodos: fallbackData.periods,
-                flujosEfectivo: fallbackData.cashflows,
-                periodoObjetivo: calculationType === "valorEnN" ? 12 : undefined,
-                montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined,
-                tipoAnualidad: calculationType === "seriesUniformes" ? ("vencida" as "vencida" | "anticipada") : undefined,
-                periodoInicial: calculationType === "seriesUniformes" ? 1 : undefined,
-                periodoFinal: calculationType === "seriesUniformes" ? 10 : undefined,
-                valorA: calculationType === "seriesUniformes" ? 1000 : undefined,
-                calcularEnSeries: calculationType === "seriesUniformes" ? ("P" as "A" | "P" | "F") : undefined
-              }
-            };
-
-            const result = calcular.resolverEcuacionValor(calculationData);
-            setResultDescription(result.descripcion);
-            setResultValue(result.valor.toString());
-            
-            // Actualizar mensaje de error para reflejar que se usó fallback
-            errorMessage = "Límite de API excedido. Se han usado técnicas de análisis local para estimar los datos. Por favor, verifica que los valores sean correctos.";
-          } catch (fallbackError) {
-            errorMessage = "No se pudo analizar el problema ni con API ni con análisis local. Por favor, intenta con una descripción más clara.";
-          }
+          errorMessage = "Límite de solicitudes excedido. Por favor, intenta más tarde.";
         } else if (error.message.includes('API key')) {
           errorMessage = "Error de configuración: API key no configurada correctamente.";
         } else {
@@ -284,17 +290,465 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
       }
       
       setError(errorMessage);
-      
-      if (!extractedData) {
-        setResultDescription("Error al analizar el problema");
-      }
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const toggleLocalMode = () => {
-    setUseLocalFallback(!useLocalFallback);
+  const calculateResult = (data: ExtractedData) => {
+    try {
+      // Preparar los datos según el tipo de cálculo
+      let calculationData;
+      
+      switch(calculationType) {
+        case 'valorEnN':
+          calculationData = {
+            objetivo: calculationType as ObjetivoCalculo,
+            entradas: {
+              tasaInteres: data.interestRate,
+              flujosEfectivo: data.cashflows,
+              periodoObjetivo: data.targetPeriod || 0,
+              periodos: data.periods
+            }
+          };
+          break;
+          
+        case 'tasaInteres':
+          calculationData = {
+            objetivo: calculationType as ObjetivoCalculo,
+            entradas: {
+              flujosEfectivo: data.cashflows,
+              periodos: data.periods || (data.cashflows ? Math.max(...data.cashflows.map(f => f.n)) + 1 : 12)
+            }
+          };
+          break;
+          
+        case 'periodosParaMonto':
+          calculationData = {
+            objetivo: calculationType as ObjetivoCalculo,
+            entradas: {
+              tasaInteres: data.interestRate,
+              flujosEfectivo: data.cashflows,
+              montoObjetivo: data.targetAmount
+            }
+          };
+          break;
+          
+        case 'incognitaX':
+          calculationData = {
+            objetivo: calculationType as ObjetivoCalculo,
+            entradas: {
+              tasaInteres: data.interestRate,
+              flujosEfectivo: data.cashflows,
+              puntoFocal: data.focalPoint || 0
+            }
+          };
+          break;
+          
+        case 'seriesUniformes':
+          calculationData = {
+            objetivo: calculationType as ObjetivoCalculo,
+            entradas: {
+              tasaInteres: data.interestRate,
+              tipoAnualidad: data.annuityType || 'vencida',
+              periodoInicial: data.initialPeriod || 1,
+              periodoFinal: data.finalPeriod || 10,
+              valorA: data.aValue,
+              valorP: data.pValue,
+              valorF: data.fValue,
+              calcularEnSeries: data.seriesCalculationType || 'A'
+            }
+          };
+          break;
+      }
+      
+      if (calculationData) {
+        const result = calcular.resolverEcuacionValor(calculationData);
+        setResultDescription(result.descripcion);
+        setResultValue(result.valor.toString());
+      }
+    } catch (error: any) {
+      console.error("Error al calcular:", error);
+      setError(`Error en el cálculo: ${error.message}`);
+    }
+  };
+
+  const renderExtractedDataForm = () => {
+    if (!extractedData) return null;
+    
+    const updateCashflow = (index: number, field: keyof CashFlow, value: any) => {
+      if (!extractedData || !extractedData.cashflows) return;
+      
+      const newCashflows = [...extractedData.cashflows];
+      newCashflows[index] = { ...newCashflows[index], [field]: value };
+      
+      setExtractedData({
+        ...extractedData,
+        cashflows: newCashflows
+      });
+    };
+    
+    const addCashflow = () => {
+      if (!extractedData) return;
+      
+      const newCashflows = [...(extractedData.cashflows || [])];
+      const lastPeriod = newCashflows.length > 0 ? Math.max(...newCashflows.map(f => f.n)) + 1 : 1;
+      
+      newCashflows.push({
+        n: lastPeriod,
+        monto: 100,
+        tipo: "entrada"
+      });
+      
+      setExtractedData({
+        ...extractedData,
+        cashflows: newCashflows
+      });
+    };
+    
+    const removeCashflow = (index: number) => {
+      if (!extractedData || !extractedData.cashflows) return;
+      
+      const newCashflows = extractedData.cashflows.filter((_, i) => i !== index);
+      
+      setExtractedData({
+        ...extractedData,
+        cashflows: newCashflows
+      });
+    };
+    
+    return (
+      <div className="p-6 border rounded-lg bg-gray-50">
+        <h4 className="text-lg font-medium mb-4">Datos extraídos</h4>
+        <div className="space-y-4">
+          {/* Campos comunes para todos los tipos de cálculo */}
+          {calculationType !== 'tasaInteres' && (
+            <div className="flex items-center mb-2">
+              <div className="w-1/3">
+                <p className="font-medium">Tasa de interés:</p>
+              </div>
+              <div className="w-2/3">
+                <input 
+                  type="number" 
+                  step="0.01"
+                  value={extractedData.interestRate ? extractedData.interestRate * 100 : ''}
+                  onChange={(e) => {
+                    setExtractedData({
+                      ...extractedData,
+                      interestRate: parseFloat(e.target.value) / 100
+                    });
+                  }}
+                  className="px-2 py-1 border rounded w-24 text-right"
+                  placeholder="0"
+                />
+                <span className="ml-1">%</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Campos específicos según el tipo de cálculo */}
+          {calculationType === 'valorEnN' && (
+            <div className="flex items-center mb-2">
+              <div className="w-1/3">
+                <p className="font-medium">Periodo objetivo:</p>
+              </div>
+              <div className="w-2/3">
+                <input 
+                  type="number"
+                  value={extractedData.targetPeriod || ''}
+                  onChange={(e) => {
+                    setExtractedData({
+                      ...extractedData,
+                      targetPeriod: parseInt(e.target.value)
+                    });
+                  }}
+                  className="px-2 py-1 border rounded w-24 text-right"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          )}
+          
+          {calculationType === 'periodosParaMonto' && (
+            <div className="flex items-center mb-2">
+              <div className="w-1/3">
+                <p className="font-medium">Monto objetivo:</p>
+              </div>
+              <div className="w-2/3">
+                <input 
+                  type="number"
+                  value={extractedData.targetAmount || ''}
+                  onChange={(e) => {
+                    setExtractedData({
+                      ...extractedData,
+                      targetAmount: parseFloat(e.target.value)
+                    });
+                  }}
+                  className="px-2 py-1 border rounded w-24 text-right"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          )}
+          
+          {calculationType === 'incognitaX' && (
+            <div className="flex items-center mb-2">
+              <div className="w-1/3">
+                <p className="font-medium">Punto focal:</p>
+              </div>
+              <div className="w-2/3">
+                <input 
+                  type="number"
+                  value={extractedData.focalPoint !== undefined ? extractedData.focalPoint : '0'}
+                  onChange={(e) => {
+                    setExtractedData({
+                      ...extractedData,
+                      focalPoint: parseInt(e.target.value)
+                    });
+                  }}
+                  className="px-2 py-1 border rounded w-24 text-right"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          )}
+          
+          {calculationType === 'seriesUniformes' && (
+            <>
+              <div className="flex items-center mb-2">
+                <div className="w-1/3">
+                  <p className="font-medium">Tipo de anualidad:</p>
+                </div>
+                <div className="w-2/3">
+                  <select
+                    value={extractedData.annuityType || 'vencida'}
+                    onChange={(e) => {
+                      setExtractedData({
+                        ...extractedData,
+                        annuityType: e.target.value as "vencida" | "anticipada"
+                      });
+                    }}
+                    className="px-2 py-1 border rounded"
+                  >
+                    <option value="vencida">Vencida</option>
+                    <option value="anticipada">Anticipada</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex items-center mb-2">
+                <div className="w-1/3">
+                  <p className="font-medium">Periodo inicial:</p>
+                </div>
+                <div className="w-2/3">
+                  <input 
+                    type="number"
+                    value={extractedData.initialPeriod || '1'}
+                    onChange={(e) => {
+                      setExtractedData({
+                        ...extractedData,
+                        initialPeriod: parseInt(e.target.value)
+                      });
+                    }}
+                    className="px-2 py-1 border rounded w-24 text-right"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center mb-2">
+                <div className="w-1/3">
+                  <p className="font-medium">Periodo final:</p>
+                </div>
+                <div className="w-2/3">
+                  <input 
+                    type="number"
+                    value={extractedData.finalPeriod || '10'}
+                    onChange={(e) => {
+                      setExtractedData({
+                        ...extractedData,
+                        finalPeriod: parseInt(e.target.value)
+                      });
+                    }}
+                    className="px-2 py-1 border rounded w-24 text-right"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center mb-2">
+                <div className="w-1/3">
+                  <p className="font-medium">Calcular:</p>
+                </div>
+                <div className="w-2/3">
+                  <select
+                    value={extractedData.seriesCalculationType || 'A'}
+                    onChange={(e) => {
+                      setExtractedData({
+                        ...extractedData,
+                        seriesCalculationType: e.target.value as "A" | "P" | "F"
+                      });
+                    }}
+                    className="px-2 py-1 border rounded"
+                  >
+                    <option value="A">Valor de la anualidad (A)</option>
+                    <option value="P">Valor presente (P)</option>
+                    <option value="F">Valor futuro (F)</option>
+                  </select>
+                </div>
+              </div>
+              
+              {(extractedData.seriesCalculationType === 'P' || extractedData.seriesCalculationType === 'F' || !extractedData.seriesCalculationType) && (
+                <div className="flex items-center mb-2">
+                  <div className="w-1/3">
+                    <p className="font-medium">Valor de anualidad (A):</p>
+                  </div>
+                  <div className="w-2/3">
+                    <input 
+                      type="number"
+                      value={extractedData.aValue || ''}
+                      onChange={(e) => {
+                        setExtractedData({
+                          ...extractedData,
+                          aValue: parseFloat(e.target.value)
+                        });
+                      }}
+                      className="px-2 py-1 border rounded w-24 text-right"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {extractedData.seriesCalculationType === 'A' && (
+                <>
+                  <div className="flex items-center mb-2">
+                    <div className="w-1/3">
+                      <p className="font-medium">Valor presente (P):</p>
+                    </div>
+                    <div className="w-2/3">
+                      <input 
+                        type="number"
+                        value={extractedData.pValue || ''}
+                        onChange={(e) => {
+                          setExtractedData({
+                            ...extractedData,
+                            pValue: parseFloat(e.target.value)
+                          });
+                        }}
+                        className="px-2 py-1 border rounded w-24 text-right"
+                        placeholder="Opcional si se ingresa F"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center mb-2">
+                    <div className="w-1/3">
+                      <p className="font-medium">Valor futuro (F):</p>
+                    </div>
+                    <div className="w-2/3">
+                      <input 
+                        type="number"
+                        value={extractedData.fValue || ''}
+                        onChange={(e) => {
+                          setExtractedData({
+                            ...extractedData,
+                            fValue: parseFloat(e.target.value)
+                          });
+                        }}
+                        className="px-2 py-1 border rounded w-24 text-right"
+                        placeholder="Opcional si se ingresa P"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+          
+          {/* Flujos de efectivo para todos excepto series uniformes */}
+          {calculationType !== 'seriesUniformes' && (
+            <div>
+              <p className="font-medium mb-2">Flujos de efectivo:</p>
+              <div className="max-h-60 overflow-y-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Periodo</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {extractedData.cashflows && extractedData.cashflows.map((flow, index) => (
+                      <tr key={index}>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm">
+                          <input 
+                            type="number" 
+                            value={flow.n} 
+                            onChange={(e) => updateCashflow(index, "n", parseInt(e.target.value))}
+                            className="px-2 py-1 border rounded w-16 text-right"
+                          />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm">
+                          <select 
+                            value={flow.tipo} 
+                            onChange={(e) => updateCashflow(index, "tipo", e.target.value as "entrada" | "salida")}
+                            className="px-2 py-1 border rounded"
+                          >
+                            <option value="entrada">Entrada</option>
+                            <option value="salida">Salida</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm">
+                          <div className="flex items-center">
+                            {calculationType !== 'incognitaX' ? (
+                              <>
+                                <span className="mr-1">$</span>
+                                <input 
+                                  type="number" 
+                                  value={typeof flow.monto === 'number' ? flow.monto : ''}
+                                  onChange={(e) => updateCashflow(index, "monto", parseFloat(e.target.value))}
+                                  className="px-2 py-1 border rounded w-24 text-right"
+                                />
+                              </>
+                            ) : (
+                              <input 
+                                type="text" 
+                                value={flow.monto.toString()}
+                                onChange={(e) => updateCashflow(index, "monto", e.target.value)}
+                                className="px-2 py-1 border rounded w-24 text-right"
+                                placeholder="Ej: x, 2x, x/5"
+                              />
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-right">
+                          <button 
+                            onClick={() => removeCashflow(index)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                
+                <div className="mt-2">
+                  <button
+                    onClick={addCashflow}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    + Añadir flujo
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -304,34 +758,10 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
           Describe tu problema financiero
         </h3>
         
-        <div className="flex justify-end">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600">Modo de análisis:</span>
-            <button 
-              onClick={toggleLocalMode}
-              className={`px-3 py-1 text-sm rounded-md ${useLocalFallback 
-                ? 'bg-gray-200 text-gray-700' 
-                : 'bg-blue-100 text-blue-700'}`}
-            >
-              {useLocalFallback ? 'Local (sin API)' : 'API Gemini'}
-            </button>
-          </div>
-        </div>
-        
         {error && (
           <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded relative" role="alert">
             <strong className="font-bold">Aviso: </strong>
             <span className="block sm:inline">{error}</span>
-            {error.includes('API excedido') && (
-              <div className="mt-2 text-sm">
-                <p>Para mejorar los resultados:</p>
-                <ul className="list-disc pl-5 mt-1">
-                  <li>Verifica que los datos extraídos son correctos</li>
-                  <li>Ajusta manualmente los valores si es necesario</li>
-                  <li>Intenta más tarde cuando los límites de API se restablezcan</li>
-                </ul>
-              </div>
-            )}
           </div>
         )}
         
@@ -361,205 +791,31 @@ const AICalculation: React.FC<AICalculationProps> = ({ calculationType }) => {
             )}
           </button>
         </div>
-        
-        {currentApiMode === 'fallback' && extractedData && (
-          <div className="text-center text-sm text-amber-600">
-            Análisis realizado en modo local. Los datos pueden requerir ajustes manuales.
-          </div>
-        )}
       </div>
 
       {extractedData && (
         <div className="space-y-6">
           {/* Gráfica de flujos */}
-          {extractedData.cashflows && extractedData.cashflows.length > 0 && (
+          {extractedData.cashflows && extractedData.cashflows.length > 0 && calculationType !== 'seriesUniformes' && (
             <div className="border rounded-lg p-4 bg-white shadow-sm">
               <h3 className="text-lg font-medium text-center mb-4">Gráfica de flujos</h3>
               <CashFlowGraph 
                 cashflows={extractedData.cashflows}
                 periods={extractedData.periods}
+                targetPeriod={calculationType === "valorEnN" ? extractedData.targetPeriod : undefined}
+                focalPoint={calculationType === "incognitaX" ? extractedData.focalPoint : undefined}
               />
             </div>
           )}
 
-          <div className="p-6 border rounded-lg bg-gray-50">
-            <div className="flex justify-between items-center mb-4">
-              <h4 className="text-lg font-medium">Datos extraídos</h4>
-              
-              {currentApiMode === 'fallback' && (
-                <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">
-                  Análisis local
-                </span>
-              )}
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center mb-2">
-                <div className="w-1/3">
-                  <p className="font-medium">Tasa de interés:</p>
-                </div>
-                <div className="w-2/3">
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    value={extractedData.interestRate * 100} 
-                    onChange={(e) => {
-                      const newData = {...extractedData};
-                      newData.interestRate = parseFloat(e.target.value) / 100;
-                      setExtractedData(newData);
-                    }}
-                    className="px-2 py-1 border rounded w-24 text-right"
-                  />
-                  <span className="ml-1">%</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center mb-2">
-                <div className="w-1/3">
-                  <p className="font-medium">Periodos:</p>
-                </div>
-                <div className="w-2/3">
-                  <input 
-                    type="number" 
-                    value={extractedData.periods} 
-                    onChange={(e) => {
-                      const newData = {...extractedData};
-                      newData.periods = parseInt(e.target.value);
-                      setExtractedData(newData);
-                    }}
-                    className="px-2 py-1 border rounded w-24 text-right"
-                  />
-                </div>
-              </div>
-              
-              {extractedData.cashflows && (
-                <div>
-                  <p className="font-medium mb-2">Flujos de efectivo:</p>
-                  <div className="max-h-60 overflow-y-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Periodo</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
-                          <th className="px-3 py-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {extractedData.cashflows.map((flow, index) => (
-                          <tr key={index}>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm">
-                              <input 
-                                type="number" 
-                                value={flow.n} 
-                                onChange={(e) => {
-                                  const newFlows = [...extractedData.cashflows];
-                                  newFlows[index].n = parseInt(e.target.value);
-                                  const newData = {...extractedData, cashflows: newFlows};
-                                  setExtractedData(newData);
-                                }}
-                                className="px-2 py-1 border rounded w-16 text-right"
-                              />
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm">
-                              <select 
-                                value={flow.tipo} 
-                                onChange={(e) => {
-                                  const newFlows = [...extractedData.cashflows];
-                                  newFlows[index].tipo = e.target.value as "entrada" | "salida";
-                                  const newData = {...extractedData, cashflows: newFlows};
-                                  setExtractedData(newData);
-                                }}
-                                className="px-2 py-1 border rounded"
-                              >
-                                <option value="entrada">Entrada</option>
-                                <option value="salida">Salida</option>
-                              </select>
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm">
-                              <div className="flex items-center">
-                                <span className="mr-1">$</span>
-                                <input 
-                                  type="number" 
-                                  value={flow.monto} 
-                                  onChange={(e) => {
-                                    const newFlows = [...extractedData.cashflows];
-                                    newFlows[index].monto = parseFloat(e.target.value);
-                                    const newData = {...extractedData, cashflows: newFlows};
-                                    setExtractedData(newData);
-                                  }}
-                                  className="px-2 py-1 border rounded w-24 text-right"
-                                />
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-right">
-                              <button 
-                                onClick={() => {
-                                  const newFlows = extractedData.cashflows.filter((_, i) => i !== index);
-                                  const newData = {...extractedData, cashflows: newFlows};
-                                  setExtractedData(newData);
-                                }}
-                                className="text-red-600 hover:text-red-800"
-                              >
-                                Eliminar
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    
-                    <div className="mt-2">
-                      <button
-                        onClick={() => {
-                          const newFlows = [...extractedData.cashflows];
-                          const lastPeriod = newFlows.length > 0 ? Math.max(...newFlows.map(f => f.n)) + 1 : 1;
-                          newFlows.push({
-                            n: lastPeriod,
-                            monto: 100,
-                            tipo: "entrada"
-                          });
-                          const newData = {...extractedData, cashflows: newFlows};
-                          setExtractedData(newData);
-                        }}
-                        className="text-sm text-blue-600 hover:text-blue-800"
-                      >
-                        + Añadir flujo
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          {renderExtractedDataForm()}
 
           <div className="flex justify-center">
             <button
-              onClick={() => {
-                // Recalcular con los datos actualizados
-                const calculationData = {
-                  objetivo: calculationType as ObjetivoCalculo,
-                  entradas: {
-                    tasaInteres: extractedData.interestRate,
-                    periodos: extractedData.periods,
-                    flujosEfectivo: extractedData.cashflows,
-                    periodoObjetivo: calculationType === "valorEnN" ? 12 : undefined,
-                    montoObjetivo: calculationType === "periodosParaMonto" ? 1500 : undefined,
-                    tipoAnualidad: calculationType === "seriesUniformes" ? ("vencida" as "vencida" | "anticipada") : undefined,
-                    periodoInicial: calculationType === "seriesUniformes" ? 1 : undefined,
-                    periodoFinal: calculationType === "seriesUniformes" ? 10 : undefined,
-                    valorA: calculationType === "seriesUniformes" ? 1000 : undefined,
-                    calcularEnSeries: calculationType === "seriesUniformes" ? ("P" as "A" | "P" | "F") : undefined
-                  }
-                };
-                
-                const result = calcular.resolverEcuacionValor(calculationData);
-                setResultDescription(result.descripcion);
-                setResultValue(result.valor.toString());
-              }}
+              onClick={() => calculateResult(extractedData)}
               className="bg-green-600 text-white py-2 px-6 rounded-md font-medium hover:bg-green-700"
             >
-              Recalcular
+              Calcular
             </button>
           </div>
 
