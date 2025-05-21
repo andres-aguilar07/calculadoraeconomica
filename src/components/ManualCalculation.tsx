@@ -19,6 +19,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   
   // Data values state
   const [interestRate, setInterestRate] = useState<string>("");
+  const [interestRateOutflows, setInterestRateOutflows] = useState<string>("");
   const [periods, setPeriods] = useState<string>("");
   const [flujos, setFlujos] = useState<Array<{ n: number; monto: number | string; tipo: "entrada" | "salida" }>>([]);
 
@@ -26,10 +27,18 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
   const [periodoPago, setPeriodoPago] = useState<string>("anual");
   const [periodoCapitalizacion, setPeriodoCapitalizacion] = useState<string>("anual");
   const [formaPago, setFormaPago] = useState<string>("vencida");
-
+  
+  // * TASA DE INTERES PARA SALIDAS
+  const [periodoPagoOutflows, setPeriodoPagoOutflows] = useState<string>("anual");
+  const [periodoCapitalizacionOutflows, setPeriodoCapitalizacionOutflows] = useState<string>("anual");
+  const [formaPagoOutflows, setFormaPagoOutflows] = useState<string>("vencida");
+  
   // * PERIODOS
   const [periodicidad, setPeriodicidad] = useState<string>("mensual");
   
+  // * USAR TASA DIFERENCIADA
+  const [useDifferentRates, setUseDifferentRates] = useState<boolean>(false);
+
   // Additional inputs for specific calculations
   const [targetPeriod, setTargetPeriod] = useState<string>("");
   const [montoObjetivo, setMontoObjetivo] = useState<string>("");
@@ -241,9 +250,55 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
     }
     
     let tasaInteresCalculos = selectedInputs.interestRate ? parseFloat(interestRate) : undefined;
+    let tasaInteresOutflowsCalculos = undefined;
     
-    // Si tenemos tasa de interés y períodos seleccionados o si es seriesUniformes, convertimos la tasa
-    if (selectedInputs.interestRate && 
+    // Si tenemos tasas diferenciadas activadas y es uno de los tipos de cálculo que las soporta
+    const usesDifferentialRates = useDifferentRates && 
+                                 ['valorEnN', 'incognitaX', 'periodosParaMonto'].includes(calculationType);
+    
+    if (usesDifferentialRates && selectedInputs.interestRate) {
+      // Convertir tasa para entradas
+      const fromType = formaPago === "vencida" ? 
+        (periodoPago === periodoCapitalizacion ? "iev" : "Tnv") : 
+        (periodoPago === periodoCapitalizacion ? "iea" : "Tna");
+      
+      // Para series uniformes, usamos la periodicidad de los periodos definidos (periodoInicial a periodoFinal)
+      const periodoDestino = (calculationType === 'seriesUniformes' && !selectedInputs.periods) ? 
+        periodicidad : // Si no hay periodos seleccionados, usar la periodicidad definida para series uniformes
+        periodicidad;  // Si hay periodos, usar esa periodicidad
+      
+      // Convertir a tasa periódica vencida según periodicidad correspondiente
+      tasaInteresCalculos = convertInterestRate({
+        valor: parseFloat(interestRate),
+        tipoOrigen: fromType as any,
+        periodoPagoOrigen: periodoPago as any,
+        periodoCapitalizacionOrigen: periodoCapitalizacion as any,
+        tipoDestino: "iev" as any, // Siempre queremos tasa periódica vencida
+        periodoPagoDestino: periodoDestino as any,
+        periodoCapitalizacionDestino: periodoDestino as any // Igualamos PC con PP en destino para tasa periódica
+      });
+      
+      // Convertir tasa para salidas
+      const fromTypeOutflows = formaPagoOutflows === "vencida" ? 
+        (periodoPagoOutflows === periodoCapitalizacionOutflows ? "iev" : "Tnv") : 
+        (periodoPagoOutflows === periodoCapitalizacionOutflows ? "iea" : "Tna");
+      
+      // Convertir a tasa periódica vencida según periodicidad correspondiente
+      tasaInteresOutflowsCalculos = convertInterestRate({
+        valor: parseFloat(interestRateOutflows),
+        tipoOrigen: fromTypeOutflows as any,
+        periodoPagoOrigen: periodoPagoOutflows as any,
+        periodoCapitalizacionOrigen: periodoCapitalizacionOutflows as any,
+        tipoDestino: "iev" as any, // Siempre queremos tasa periódica vencida
+        periodoPagoDestino: periodoDestino as any,
+        periodoCapitalizacionDestino: periodoDestino as any // Igualamos PC con PP en destino para tasa periódica
+      });
+      
+      console.log("tasaInteresCalculos (entradas): ", tasaInteresCalculos);
+      console.log("tasaInteresOutflowsCalculos (salidas): ", tasaInteresOutflowsCalculos);
+    }
+    // Conversión normal de tasa única cuando no hay diferenciadas o el tipo de cálculo no lo soporta
+    else if (selectedInputs.interestRate && 
         (selectedInputs.periods || calculationType === 'seriesUniformes')) {
       // Convertir la tasa a tasa periódica vencida según la periodicidad seleccionada
       const fromType = formaPago === "vencida" ? 
@@ -273,6 +328,8 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
       objetivo: calculationType,
       entradas: {
         tasaInteres: tasaInteresCalculos,
+        tasaInteresOutflows: tasaInteresOutflowsCalculos, // Nueva propiedad para tasa de salidas
+        usarTasasDiferenciadas: usesDifferentialRates, // Indicador para usar tasas diferenciadas
         periodos: selectedInputs.periods ? parseInt(periods) : undefined,
         flujosEfectivo: (calculationType !== "seriesUniformes" && selectedInputs.cashflows) ? flujos.map(f => ({
           n: f.n,
@@ -361,7 +418,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
                 i (tasa de interés)
               </label>
 
-              {selectedInputs.interestRate && (
+              {selectedInputs.interestRate && !useDifferentRates && (
                 <div className="flex space-x-2 ml-7">
                   <div className="flex flex-col">
                     <label className="text-sm text-gray-600 mb-1"><small>Periodo de Pago</small></label>
@@ -420,16 +477,174 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
             </div>
             
             {selectedInputs.interestRate && (
-              <div className="ml-7">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={interestRate}
-                  onChange={(e) => setInterestRate(e.target.value)}
-                  className="w-full p-2 border rounded-md"
-                  placeholder="Ej: 0.05 para 5%"
-                />
-                <p className="text-sm text-gray-500 mt-1">Forma decimal (ej: 0.05 para 5%)</p>
+              <div className="ml-7 space-y-4">
+                {calculationType !== 'seriesUniformes' && ['valorEnN', 'incognitaX', 'periodosParaMonto'].includes(calculationType) && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="differentialRateCheck"
+                      checked={useDifferentRates}
+                      onChange={() => setUseDifferentRates(!useDifferentRates)}
+                      className="h-4 w-4"
+                    />
+                    <label htmlFor="differentialRateCheck" className="text-sm">
+                      Usar tasas diferenciadas para entradas y salidas
+                    </label>
+                  </div>
+                )}
+                
+                {!useDifferentRates ? (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Tasa de interés</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={interestRate}
+                      onChange={(e) => setInterestRate(e.target.value)}
+                      className="w-full p-2 border rounded-md"
+                      placeholder="Ej: 0.05 para 5%"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">Forma decimal (ej: 0.05 para 5%)</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Configuración para entradas */}
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Tasa de interés para entradas</label>
+                      <div className="flex space-x-2 mb-2">
+                        <div className="flex flex-col">
+                          <label className="text-sm text-gray-600 mb-1"><small>Periodo de Pago</small></label>
+                          <select
+                            className="p-2 border rounded-md text-sm"
+                            value={periodoPago}
+                            onChange={(e) => setPeriodoPago(e.target.value)}
+                            title="Periodo de Pago"
+                          >
+                            <option value="diaria">Diaria</option>
+                            <option value="semanal">Semanal</option>
+                            <option value="quincenal">Quincenal</option>
+                            <option value="mensual">Mensual</option>
+                            <option value="bimestral">Bimestral</option>
+                            <option value="trimestral">Trimestral</option>
+                            <option value="cuatrimestral">Cuatrimestral</option>
+                            <option value="semestral">Semestral</option>
+                            <option value="anual">Anual</option>
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col">
+                          <label className="text-sm text-gray-600 mb-1"><small>Periodo de Capitalización</small></label>
+                          <select
+                            className="p-2 border rounded-md text-sm"
+                            value={periodoCapitalizacion}
+                            onChange={(e) => setPeriodoCapitalizacion(e.target.value)}
+                            title="Periodo de Capitalización"
+                          >
+                            <option value="diaria">Diaria</option>
+                            <option value="semanal">Semanal</option>
+                            <option value="quincenal">Quincenal</option>
+                            <option value="mensual">Mensual</option>
+                            <option value="bimestral">Bimestral</option>
+                            <option value="trimestral">Trimestral</option>
+                            <option value="cuatrimestral">Cuatrimestral</option>
+                            <option value="semestral">Semestral</option>
+                            <option value="anual">Anual</option>
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col">
+                          <label className="text-sm text-gray-600 mb-1"><small>Forma de Pago</small></label>
+                          <select
+                            className="p-2 border rounded-md text-sm"
+                            value={formaPago}
+                            onChange={(e) => setFormaPago(e.target.value)}
+                            title="Forma de Pago"
+                          >
+                            <option value="vencida">Vencida</option>
+                            <option value="anticipada">Anticipada</option>
+                          </select>
+                        </div>
+                      </div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={interestRate}
+                        onChange={(e) => setInterestRate(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                        placeholder="Ej: 0.05 para 5%"
+                      />
+                      <p className="text-sm text-gray-500 mt-1">Forma decimal (ej: 0.05 para 5%)</p>
+                    </div>
+                    
+                    {/* Configuración para salidas */}
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Tasa de interés para salidas</label>
+                      <div className="flex space-x-2 mb-2">
+                        <div className="flex flex-col">
+                          <label className="text-sm text-gray-600 mb-1"><small>Periodo de Pago</small></label>
+                          <select
+                            className="p-2 border rounded-md text-sm"
+                            value={periodoPagoOutflows}
+                            onChange={(e) => setPeriodoPagoOutflows(e.target.value)}
+                            title="Periodo de Pago"
+                          >
+                            <option value="diaria">Diaria</option>
+                            <option value="semanal">Semanal</option>
+                            <option value="quincenal">Quincenal</option>
+                            <option value="mensual">Mensual</option>
+                            <option value="bimestral">Bimestral</option>
+                            <option value="trimestral">Trimestral</option>
+                            <option value="cuatrimestral">Cuatrimestral</option>
+                            <option value="semestral">Semestral</option>
+                            <option value="anual">Anual</option>
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col">
+                          <label className="text-sm text-gray-600 mb-1"><small>Periodo de Capitalización</small></label>
+                          <select
+                            className="p-2 border rounded-md text-sm"
+                            value={periodoCapitalizacionOutflows}
+                            onChange={(e) => setPeriodoCapitalizacionOutflows(e.target.value)}
+                            title="Periodo de Capitalización"
+                          >
+                            <option value="diaria">Diaria</option>
+                            <option value="semanal">Semanal</option>
+                            <option value="quincenal">Quincenal</option>
+                            <option value="mensual">Mensual</option>
+                            <option value="bimestral">Bimestral</option>
+                            <option value="trimestral">Trimestral</option>
+                            <option value="cuatrimestral">Cuatrimestral</option>
+                            <option value="semestral">Semestral</option>
+                            <option value="anual">Anual</option>
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col">
+                          <label className="text-sm text-gray-600 mb-1"><small>Forma de Pago</small></label>
+                          <select
+                            className="p-2 border rounded-md text-sm"
+                            value={formaPagoOutflows}
+                            onChange={(e) => setFormaPagoOutflows(e.target.value)}
+                            title="Forma de Pago"
+                          >
+                            <option value="vencida">Vencida</option>
+                            <option value="anticipada">Anticipada</option>
+                          </select>
+                        </div>
+                      </div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={interestRateOutflows}
+                        onChange={(e) => setInterestRateOutflows(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                        placeholder="Ej: 0.05 para 5%"
+                      />
+                      <p className="text-sm text-gray-500 mt-1">Forma decimal (ej: 0.05 para 5%)</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             

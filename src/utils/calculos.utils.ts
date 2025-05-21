@@ -4,6 +4,8 @@ export type ObjetivoCalculo = 'valorEnN' | 'tasaInteres' | 'periodosParaMonto' |
 // Datos de entrada para el cálculo
 interface EntradasCalculo {
     tasaInteres?: number;             // Tasa de interés
+    tasaInteresOutflows?: number;     // Tasa de interés para flujos de salida
+    usarTasasDiferenciadas?: boolean; // Indica si usar tasas diferentes para entradas y salidas
     flujosEfectivo?: Array<{            // Array de flujos de efectivo
         n: number;                    // Número de periodo
         monto: number | string;       // Monto del flujo (puede ser un número o una expresión con 'x')
@@ -67,7 +69,7 @@ function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
     console.log("Función: calcularValorEnN");
     console.log("Entradas: ", entradas);
 
-    const { tasaInteres, flujosEfectivo, periodoObjetivo } = entradas;
+    const { tasaInteres, tasaInteresOutflows, usarTasasDiferenciadas, flujosEfectivo, periodoObjetivo } = entradas;
 
     // * Validaciones
     if (!tasaInteres || !flujosEfectivo) {
@@ -108,7 +110,13 @@ function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
             }
         }
         
-        const valor_calculado = calcularValorFlujoEnN(flujo, periodoObjetivo, tasaInteres);
+        const valor_calculado = calcularValorFlujoEnN(
+            flujo, 
+            periodoObjetivo, 
+            tasaInteres, 
+            tasaInteresOutflows, 
+            usarTasasDiferenciadas
+        );
         console.log("Valor calculado para el flujo: ", flujo, " es: ", valor_calculado);
         valorTotal += valor_calculado;
     }
@@ -130,7 +138,9 @@ function calcularValorEnN(entradas: EntradasCalculo): ResultadoCalculo {
 function calcularValorFlujoEnN(
     flujo: Flujo,
     targetPeriod: number,
-    interestRate: number): number {
+    interestRate: number,
+    interestRateOutflows?: number,
+    useDifferentialRates?: boolean): number {
 
     // Si el flujo tiene una expresión con X, no calculamos aquí
     if (typeof flujo.monto === 'string') {
@@ -144,13 +154,17 @@ function calcularValorFlujoEnN(
 
     const distanciaPeriodos = Math.abs(flujo.n - targetPeriod);
     const factor = flujo.tipo === "entrada" ? 1 : -1;
+    
+    // Seleccionar la tasa adecuada según el tipo de flujo y si está activa la diferenciación
+    const tasaAplicar = (useDifferentialRates && flujo.tipo === "salida" && interestRateOutflows !== undefined) ? 
+                        interestRateOutflows : interestRate;
 
     // Si el periodo objetivo es anterior al flujo, traer el valor al presente
     if (targetPeriod < flujo.n) {
-        return flujo.monto / Math.pow(1 + interestRate, distanciaPeriodos) * factor;
+        return flujo.monto / Math.pow(1 + tasaAplicar, distanciaPeriodos) * factor;
     } else {
         // Si el periodo objetivo es posterior al flujo, llevar el valor a futuro
-        return flujo.monto * Math.pow(1 + interestRate, distanciaPeriodos) * factor;
+        return flujo.monto * Math.pow(1 + tasaAplicar, distanciaPeriodos) * factor;
     }
 }
 
@@ -159,7 +173,7 @@ function calcularTasaInteres(entradas: EntradasCalculo): ResultadoCalculo {
     console.log("Función: calcularTasaInteres");
     console.log("Entradas: ", entradas);
     
-    const { flujosEfectivo, periodos } = entradas;
+    const { flujosEfectivo, periodos, tasaInteresOutflows, usarTasasDiferenciadas } = entradas;
 
     if (!flujosEfectivo || !periodos) {
         throw new Error('Faltan datos necesarios para el cálculo');
@@ -169,7 +183,13 @@ function calcularTasaInteres(entradas: EntradasCalculo): ResultadoCalculo {
         throw new Error('No hay flujos de efectivo para calcular');
     }
 
-    const tasaInteres = calcularTIR(flujosEfectivo, periodos);
+    const tasaInteres = calcularTIR(
+        flujosEfectivo, 
+        periodos, 
+        1e-6, 
+        tasaInteresOutflows, 
+        usarTasasDiferenciadas
+    );
 
     console.log("Tasa de interés calculada: ", tasaInteres);
 
@@ -183,7 +203,9 @@ function calcularTasaInteres(entradas: EntradasCalculo): ResultadoCalculo {
 function calcularTIR(
     flujos: Flujo[],
     targetPeriod: number = 0,
-    precision: number = 1e-6
+    precision: number = 1e-6,
+    tasaInteresOutflows?: number,
+    useDifferentialRates?: boolean
 ): number | null {
     // Verificar que no hay flujos con expresiones X
     if (flujos.some(flujo => typeof flujo.monto === 'string' && String(flujo.monto).toLowerCase().includes('x'))) {
@@ -208,7 +230,13 @@ function calcularTIR(
     // * Funcion auxiliar para calcular el valor presente neto
     const calcularVPN = (rate: number) => {
         return flujosNumericos.reduce((total, flujo) => {
-            return total + calcularValorFlujoEnN(flujo, targetPeriod, rate);
+            return total + calcularValorFlujoEnN(
+                flujo, 
+                targetPeriod, 
+                rate, 
+                useDifferentialRates ? rate : undefined, // Usar la misma tasa para simplificar
+                false // No usar tasas diferenciadas en TIR
+            );
         }, 0);
     };
 
@@ -243,7 +271,7 @@ function calcularPeriodosParaMonto(entradas: EntradasCalculo): ResultadoCalculo 
     console.log("Función: calcularPeriodosParaMonto");
     console.log("Entradas: ", entradas);
     
-    const { tasaInteres, flujosEfectivo, montoObjetivo } = entradas;
+    const { tasaInteres, tasaInteresOutflows, usarTasasDiferenciadas, flujosEfectivo, montoObjetivo } = entradas;
 
     // * Validaciones
     if (!tasaInteres || !flujosEfectivo || !montoObjetivo) {
@@ -278,16 +306,18 @@ function calcularPeriodosParaMonto(entradas: EntradasCalculo): ResultadoCalculo 
     // Función para calcular el valor en un periodo específico
     const calcularValorEnPeriodo = (periodo: number): number => {
         return flujosNumericos.reduce((acumulado, flujo) => {
-            return acumulado + calcularValorFlujoEnN(flujo, periodo, tasaInteres);
+            return acumulado + calcularValorFlujoEnN(
+                flujo, 
+                periodo, 
+                tasaInteres, 
+                tasaInteresOutflows, 
+                usarTasasDiferenciadas
+            );
         }, 0);
     };
 
     // Determinamos un límite superior razonable para la búsqueda
     const MAX_PERIODOS = ultimoPeriodo + 1000;
-    
-    // Búsqueda binaria para encontrar el periodo exacto (posiblemente decimal)
-    // let periodoInferior = ultimoPeriodo;
-    // let periodoSuperior = MAX_PERIODOS;
     
     // Verificar si el valor en el último periodo ya alcanza o supera el monto objetivo
     const valorUltimoPeriodo = calcularValorEnPeriodo(ultimoPeriodo);
@@ -351,7 +381,7 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
     console.log("Función: calcularIncognitaX");
     console.log("Entradas: ", entradas);
 
-    const { tasaInteres, flujosEfectivo, puntoFocal } = entradas;
+    const { tasaInteres, tasaInteresOutflows, usarTasasDiferenciadas, flujosEfectivo, puntoFocal } = entradas;
 
     // * Validaciones
     if (!tasaInteres || !flujosEfectivo) {
@@ -438,16 +468,20 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
     for (const { flujo, coeficiente } of flujosConX) {
         let coeficienteAjustado = coeficiente;
         
+        // Seleccionar la tasa adecuada según el tipo de flujo y si está activa la diferenciación
+        const tasaAplicar = (usarTasasDiferenciadas && flujo.tipo === "salida" && tasaInteresOutflows !== undefined) ? 
+                           tasaInteresOutflows : tasaInteres;
+        
         // Ajustar el coeficiente según la posición temporal respecto al período de referencia
         if (flujo.n !== periodoReferencia) {
             const distanciaPeriodos = Math.abs(flujo.n - periodoReferencia);
             
             if (flujo.n < periodoReferencia) {
                 // Si el flujo es anterior al período de referencia, llevarlo al futuro
-                coeficienteAjustado *= Math.pow(1 + tasaInteres, distanciaPeriodos);
+                coeficienteAjustado *= Math.pow(1 + tasaAplicar, distanciaPeriodos);
             } else {
                 // Si el flujo es posterior al período de referencia, traerlo al presente
-                coeficienteAjustado /= Math.pow(1 + tasaInteres, distanciaPeriodos);
+                coeficienteAjustado /= Math.pow(1 + tasaAplicar, distanciaPeriodos);
             }
         }
         
@@ -458,7 +492,13 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
 
     // Calcular los términos independientes (flujos numéricos)
     for (const flujo of flujosNumericos) {
-        const valorEnPeriodoReferencia = calcularValorFlujoEnN(flujo, periodoReferencia, tasaInteres);
+        const valorEnPeriodoReferencia = calcularValorFlujoEnN(
+            flujo, 
+            periodoReferencia, 
+            tasaInteres, 
+            tasaInteresOutflows, 
+            usarTasasDiferenciadas
+        );
         
         // Los sumamos pero con signo negativo porque pasarán al otro lado de la ecuación
         terminosIndependientes -= valorEnPeriodoReferencia;
