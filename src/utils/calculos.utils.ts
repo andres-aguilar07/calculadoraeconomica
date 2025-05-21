@@ -489,7 +489,7 @@ function calcularIncognitaX(entradas: EntradasCalculo): ResultadoCalculo {
 // ! CASO 5: Calcular series uniformes
 function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
     console.log("Función: calcularSeriesUniformes");
-    console.log("Entradas: ", entradas);
+    console.log("Entradas: ", JSON.stringify(entradas, null, 4));
     
     const { 
         tasaInteres, 
@@ -526,63 +526,157 @@ function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
         throw new Error('El periodo final debe ser mayor o igual que el periodo inicial');
     }
 
+    console.log("Datos de cálculo:", {
+        tasaInteres,
+        tipoAnualidad,
+        periodoInicial,
+        periodoFinal,
+        n,
+        valorA,
+        valorP,
+        valorF,
+        calcularEnSeries
+    });
+
     // Realizar el cálculo según lo que se quiere obtener
     if (calcularEnSeries === 'A') {
         // Calculamos el valor de la anualidad (A)
-        if (valorP !== undefined) {
-            // Calcular A a partir de P
-            if (tipoAnualidad === 'vencida') {
-                // A = P * ((i(1+i)^n) / ((1+i)^n - 1))
-                const resultado = valorP * ((tasaInteres * Math.pow(1 + tasaInteres, n)) / (Math.pow(1 + tasaInteres, n) - 1));
-                return {
-                    valor: Math.round(resultado * 100) / 100,
-                    descripcion: `Valor de la anualidad (A) con anualidad vencida: ${Math.round(resultado * 100) / 100}`
-                };
-            } else {
-                // A = P * ((i(1+i)^(n-1)) / ((1+i)^n - 1))
-                const resultado = valorP * ((tasaInteres * Math.pow(1 + tasaInteres, n - 1)) / (Math.pow(1 + tasaInteres, n) - 1));
-                return {
-                    valor: Math.round(resultado * 100) / 100,
-                    descripcion: `Valor de la anualidad (A) con anualidad anticipada: ${Math.round(resultado * 100) / 100}`
-                };
+        
+        // Primero verificamos si tenemos un valor F válido para calcular
+        if (valorF !== undefined && valorF !== null) {
+            const valorFNumerico = Number(valorF);
+            
+            console.log("Calculando A a partir de F:", valorFNumerico);
+            
+            if (isNaN(valorFNumerico)) {
+                console.error("El valor F no es un número válido:", valorF);
+                throw new Error(`El valor futuro (F) proporcionado no es un número válido: ${valorF}`);
             }
-        } else if (valorF !== undefined) {
-            // Calcular A a partir de F
+            
             if (tipoAnualidad === 'vencida') {
                 // A = F * (i / ((1+i)^n - 1))
-                const resultado = valorF * (tasaInteres / (Math.pow(1 + tasaInteres, n) - 1));
+                const denominador = Math.pow(1 + tasaInteres, n) - 1;
+                console.log("Denominador:", denominador);
+                
+                if (denominador === 0) {
+                    throw new Error('El denominador es cero. No se puede realizar el cálculo.');
+                }
+                
+                const factor = tasaInteres / denominador;
+                console.log("Factor:", factor);
+                
+                const resultado = valorFNumerico * factor;
+                console.log("Resultado sin redondear:", resultado);
+                
+                const valorRedondeado = Math.round(resultado * 100) / 100;
+                console.log("Valor redondeado:", valorRedondeado);
+                
                 return {
-                    valor: Math.round(resultado * 100) / 100,
-                    descripcion: `Valor de la anualidad (A) con anualidad vencida: ${Math.round(resultado * 100) / 100}`
+                    valor: valorRedondeado,
+                    descripcion: `Valor de la anualidad (A) con anualidad vencida: ${valorRedondeado}`
                 };
             } else {
                 // A = F * (i / ((1+i)^n - 1)) * (1 / (1+i))
-                const resultado = valorF * (tasaInteres / (Math.pow(1 + tasaInteres, n) - 1)) * (1 / (1 + tasaInteres));
+                const denominador = Math.pow(1 + tasaInteres, n) - 1;
+                console.log("Denominador:", denominador);
+                
+                if (denominador === 0) {
+                    throw new Error('El denominador es cero. No se puede realizar el cálculo.');
+                }
+                
+                const factor1 = tasaInteres / denominador;
+                console.log("Factor1 (i/((1+i)^n-1)):", factor1);
+                
+                const factor2 = 1 / (1 + tasaInteres);
+                console.log("Factor2 (1/(1+i)):", factor2);
+                
+                // Calculo paso a paso para depurar
+                const paso1 = valorFNumerico * factor1;
+                console.log("Paso1 (valorF * factor1):", paso1);
+                
+                const resultado = paso1 * factor2;
+                console.log("Resultado final (paso1 * factor2):", resultado);
+                
+                const valorRedondeado = Math.round(resultado * 100) / 100;
+                console.log("Valor redondeado:", valorRedondeado);
+                
                 return {
-                    valor: Math.round(resultado * 100) / 100,
-                    descripcion: `Valor de la anualidad (A) con anualidad anticipada: ${Math.round(resultado * 100) / 100}`
+                    valor: valorRedondeado,
+                    descripcion: `Valor de la anualidad (A) con anualidad anticipada: ${valorRedondeado}`
                 };
             }
-        } else {
+        } 
+        // Luego verificamos si tenemos un valor P válido para calcular
+        else if (valorP !== undefined && valorP !== null) {
+            const valorPNumerico = Number(valorP);
+            
+            console.log("Calculando A a partir de P:", valorPNumerico);
+            
+            if (isNaN(valorPNumerico)) {
+                throw new Error(`El valor presente (P) proporcionado no es un número válido: ${valorP}`);
+            }
+            
+            if (tipoAnualidad === 'vencida') {
+                // A = P * ((i(1+i)^n) / ((1+i)^n - 1))
+                const denominador = Math.pow(1 + tasaInteres, n) - 1;
+                
+                if (denominador === 0) {
+                    throw new Error('El denominador es cero. No se puede realizar el cálculo.');
+                }
+                
+                const resultado = valorPNumerico * ((tasaInteres * Math.pow(1 + tasaInteres, n)) / denominador);
+                const valorRedondeado = Math.round(resultado * 100) / 100;
+                return {
+                    valor: valorRedondeado,
+                    descripcion: `Valor de la anualidad (A) con anualidad vencida: ${valorRedondeado}`
+                };
+            } else {
+                // A = P * ((i(1+i)^(n-1)) / ((1+i)^n - 1))
+                const denominador = Math.pow(1 + tasaInteres, n) - 1;
+                
+                if (denominador === 0) {
+                    throw new Error('El denominador es cero. No se puede realizar el cálculo.');
+                }
+                
+                const resultado = valorPNumerico * ((tasaInteres * Math.pow(1 + tasaInteres, n - 1)) / denominador);
+                const valorRedondeado = Math.round(resultado * 100) / 100;
+                return {
+                    valor: valorRedondeado,
+                    descripcion: `Valor de la anualidad (A) con anualidad anticipada: ${valorRedondeado}`
+                };
+            }
+        }
+        // Si no hay ni P ni F válidos, lanzar error
+        else {
             throw new Error('Para calcular A se necesita proporcionar el valor de P o F');
         }
     } else if (calcularEnSeries === 'P') {
         // Calculamos el valor presente (P)
-        if (valorA !== undefined) {
+        if (valorA !== undefined && valorA !== null) {
             // Calcular P a partir de A
+            const valorANumerico = Number(valorA);
+            
+            console.log("Calculando P a partir de A:", valorANumerico);
+            
+            if (isNaN(valorANumerico)) {
+                throw new Error(`El valor de la anualidad (A) proporcionado no es un número válido: ${valorA}`);
+            }
+            
             if (tipoAnualidad === 'vencida') {
                 // P = A * (((1+i)^n - 1) / (i(1+i)^n))
-                const resultado = valorA * ((Math.pow(1 + tasaInteres, n) - 1) / (tasaInteres * Math.pow(1 + tasaInteres, n)));
+                const resultado = valorANumerico * ((Math.pow(1 + tasaInteres, n) - 1) / (tasaInteres * Math.pow(1 + tasaInteres, n)));
+                const valorRedondeado = Math.round(resultado * 100) / 100;
                 return {
-                    valor: Math.round(resultado * 100) / 100,
-                    descripcion: `Valor presente (P) con anualidad vencida: ${Math.round(resultado * 100) / 100}`
+                    valor: valorRedondeado,
+                    descripcion: `Valor presente (P) con anualidad vencida: ${valorRedondeado}`
                 };
             } else {
                 // P = A * (((1+i)^n - 1) / (i(1+i)^(n-1)))
-                const resultado = valorA * ((Math.pow(1 + tasaInteres, n) - 1) / (tasaInteres * Math.pow(1 + tasaInteres, n - 1)));
+                const resultado = valorANumerico * ((Math.pow(1 + tasaInteres, n) - 1) / (tasaInteres * Math.pow(1 + tasaInteres, n - 1)));
+                const valorRedondeado = Math.round(resultado * 100) / 100;
                 return {
-                    valor: Math.round(resultado * 100) / 100,
-                    descripcion: `Valor presente (P) con anualidad anticipada: ${Math.round(resultado * 100) / 100}`
+                    valor: valorRedondeado,
+                    descripcion: `Valor presente (P) con anualidad anticipada: ${valorRedondeado}`
                 };
             }
         } else {
@@ -590,21 +684,31 @@ function calcularSeriesUniformes(entradas: EntradasCalculo): ResultadoCalculo {
         }
     } else if (calcularEnSeries === 'F') {
         // Calculamos el valor futuro (F)
-        if (valorA !== undefined) {
+        if (valorA !== undefined && valorA !== null) {
             // Calcular F a partir de A
+            const valorANumerico = Number(valorA);
+            
+            console.log("Calculando F a partir de A:", valorANumerico);
+            
+            if (isNaN(valorANumerico)) {
+                throw new Error(`El valor de la anualidad (A) proporcionado no es un número válido: ${valorA}`);
+            }
+            
             if (tipoAnualidad === 'vencida') {
                 // F = A * (((1+i)^n - 1) / i)
-                const resultado = valorA * ((Math.pow(1 + tasaInteres, n) - 1) / tasaInteres);
+                const resultado = valorANumerico * ((Math.pow(1 + tasaInteres, n) - 1) / tasaInteres);
+                const valorRedondeado = Math.round(resultado * 100) / 100;
                 return {
-                    valor: Math.round(resultado * 100) / 100,
-                    descripcion: `Valor futuro (F) con anualidad vencida: ${Math.round(resultado * 100) / 100}`
+                    valor: valorRedondeado,
+                    descripcion: `Valor futuro (F) con anualidad vencida: ${valorRedondeado}`
                 };
             } else {
                 // F = A * (((1+i)^n - 1) / i) * (1+i)
-                const resultado = valorA * ((Math.pow(1 + tasaInteres, n) - 1) / tasaInteres) * (1 + tasaInteres);
+                const resultado = valorANumerico * ((Math.pow(1 + tasaInteres, n) - 1) / tasaInteres) * (1 + tasaInteres);
+                const valorRedondeado = Math.round(resultado * 100) / 100;
                 return {
-                    valor: Math.round(resultado * 100) / 100,
-                    descripcion: `Valor futuro (F) con anualidad anticipada: ${Math.round(resultado * 100) / 100}`
+                    valor: valorRedondeado,
+                    descripcion: `Valor futuro (F) con anualidad anticipada: ${valorRedondeado}`
                 };
             }
         } else {

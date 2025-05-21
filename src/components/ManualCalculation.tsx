@@ -142,7 +142,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
       entradas: {
         tasaInteres: tasaInteresCalculos,
         periodos: selectedInputs.periods ? parseInt(periods) : undefined,
-        flujosEfectivo: selectedInputs.cashflows ? flujos.map(f => ({
+        flujosEfectivo: (calculationType !== "seriesUniformes" && selectedInputs.cashflows) ? flujos.map(f => ({
           n: f.n,
           monto: f.monto,
           tipo: f.tipo
@@ -171,7 +171,7 @@ const ManualCalculation: React.FC<ManualCalculationProps> = ({ calculationType }
 
   const botonCalcularDisabled =
     // !selectedInputs.interestRate ||
-    !selectedInputs.cashflows ||
+    (calculationType !== "seriesUniformes" && !selectedInputs.cashflows) ||
     (calculationType !== "seriesUniformes" && flujos.length === 0) ||
     (calculationType === "valorEnN" && !targetPeriod) ||
     (calculationType === "periodosParaMonto" && !montoObjetivo) ||
